@@ -1,0 +1,6 @@
+{
+  "name": "Wine Auction System",
+  "description": "ระบบประมูลไวน์เรียลไทม์ หรูหรา ทันสมัย รองรับจอแสดงผลหลักและอุปกรณ์ผู้ประมูลผ่าน QR Code",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

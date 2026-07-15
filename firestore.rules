@@ -1,0 +1,92 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper to validate document IDs
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // Bidder document validator
+    function isValidBidder(data) {
+      return data.keys().hasAll(['id', 'firstName', 'lastName', 'phone', 'createdAt'])
+        && data.keys().size() == 5
+        && data.id is string && data.id.size() >= 4 && data.id.size() <= 10
+        && data.firstName is string && data.firstName.size() > 0 && data.firstName.size() <= 100
+        && data.lastName is string && data.lastName.size() > 0 && data.lastName.size() <= 100
+        && data.phone is string && data.phone.size() >= 9 && data.phone.size() <= 20
+        && (data.createdAt is int || data.createdAt is float);
+    }
+
+    // Wine item validator
+    function isValidWine(data) {
+      return data.keys().hasAll(['id', 'name', 'imageUrl', 'startingPrice', 'currentBid', 'highestBidderId', 'highestBidderName', 'bidIncrementSteps', 'status', 'updatedAt'])
+        && data.keys().size() == 10
+        && data.id is string && data.id == 'active_wine'
+        && data.name is string && data.name.size() > 0 && data.name.size() <= 200
+        && data.imageUrl is string && data.imageUrl.size() <= 1000
+        && (data.startingPrice is int || data.startingPrice is float) && data.startingPrice >= 0
+        && (data.currentBid is int || data.currentBid is float) && data.currentBid >= 0
+        && (data.highestBidderId == null || (data.highestBidderId is string && data.highestBidderId.size() > 0))
+        && (data.highestBidderName == null || (data.highestBidderName is string && data.highestBidderName.size() > 0))
+        && data.bidIncrementSteps is list
+        && data.status is string && (data.status == 'active' || data.status == 'ended' || data.status == 'completed')
+        && (data.updatedAt is int || data.updatedAt is float);
+    }
+
+    // Bid record validator
+    function isValidBid(data) {
+      return data.keys().hasAll(['id', 'bidderId', 'bidderName', 'amount', 'timestamp'])
+        && data.keys().size() == 5
+        && data.id is string && data.id.size() > 0 && data.id.size() <= 128
+        && data.bidderId is string && data.bidderId.size() > 0 && data.bidderId.size() <= 128
+        && data.bidderName is string && data.bidderName.size() > 0 && data.bidderName.size() <= 200
+        && (data.amount is int || data.amount is float) && data.amount >= 0
+        && (data.timestamp is int || data.timestamp is float);
+    }
+
+    // Completed Lot validator
+    function isValidCompletedLot(data) {
+      return data.keys().hasAll(['id', 'wineId', 'name', 'imageUrl', 'startingPrice', 'finalPrice', 'winnerId', 'winnerName', 'winnerPhone', 'endedAt'])
+        && data.keys().size() == 10
+        && data.id is string
+        && data.wineId is string
+        && data.name is string
+        && data.imageUrl is string
+        && (data.startingPrice is int || data.startingPrice is float)
+        && (data.finalPrice is int || data.finalPrice is float)
+        && (data.winnerId == null || data.winnerId is string)
+        && (data.winnerName == null || data.winnerName is string)
+        && (data.winnerPhone == null || data.winnerPhone is string)
+        && (data.endedAt is int || data.endedAt is float);
+    }
+
+    match /bidders/{bidderId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(bidderId) && isValidBidder(request.resource.data);
+      allow delete: if true;
+    }
+
+    match /auctions/{auctionId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(auctionId) && isValidWine(request.resource.data);
+    }
+
+    match /bids/{bidId} {
+      allow get, list: if true;
+      allow create: if isValidId(bidId) && isValidBid(request.resource.data);
+      allow delete: if true; // Allowed for admin to clear bid history
+    }
+
+    match /completed_lots/{lotId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(lotId) && isValidCompletedLot(request.resource.data);
+      allow delete: if true;
+    }
+  }
+}

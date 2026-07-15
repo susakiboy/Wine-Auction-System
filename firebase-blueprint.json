@@ -1,0 +1,174 @@
+{
+  "entities": {
+    "Bidder": {
+      "title": "Bidder",
+      "description": "Information about a registered bidder",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "The custom 4-digit bidder ID"
+        },
+        "firstName": {
+          "type": "string",
+          "description": "Bidder's first name"
+        },
+        "lastName": {
+          "type": "string",
+          "description": "Bidder's last name"
+        },
+        "phone": {
+          "type": "string",
+          "description": "Bidder's phone number"
+        },
+        "createdAt": {
+          "type": "number",
+          "description": "Registration epoch timestamp"
+        }
+      },
+      "required": ["id", "firstName", "lastName", "phone", "createdAt"]
+    },
+    "WineItem": {
+      "title": "WineItem",
+      "description": "Details of the wine item under auction",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "The active wine document ID (active_wine)"
+        },
+        "name": {
+          "type": "string",
+          "description": "Wine brand and year name"
+        },
+        "imageUrl": {
+          "type": "string",
+          "description": "Wine bottle image URL"
+        },
+        "startingPrice": {
+          "type": "number",
+          "description": "Initial bid price"
+        },
+        "currentBid": {
+          "type": "number",
+          "description": "Current highest bid amount"
+        },
+        "highestBidderId": {
+          "type": "string",
+          "description": "ID of the current leading bidder"
+        },
+        "highestBidderName": {
+          "type": "string",
+          "description": "Truncated name of the leading bidder"
+        },
+        "bidIncrementSteps": {
+          "type": "array",
+          "description": "Predefined increments for the bidder panel"
+        },
+        "status": {
+          "type": "string",
+          "description": "Current auction status (active, completed)"
+        },
+        "updatedAt": {
+          "type": "number",
+          "description": "Epoch timestamp of last update"
+        }
+      },
+      "required": ["id", "name", "startingPrice", "currentBid", "status", "updatedAt"]
+    },
+    "BidRecord": {
+      "title": "BidRecord",
+      "description": "A single bid record log",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique key containing timestamp and bidder ID"
+        },
+        "bidderId": {
+          "type": "string",
+          "description": "Bidder who placed this bid"
+        },
+        "bidderName": {
+          "type": "string",
+          "description": "Name of the bidder"
+        },
+        "amount": {
+          "type": "number",
+          "description": "Amount of this bid"
+        },
+        "timestamp": {
+          "type": "number",
+          "description": "Time when bid was cast"
+        }
+      },
+      "required": ["id", "bidderId", "bidderName", "amount", "timestamp"]
+    },
+    "CompletedLot": {
+      "title": "CompletedLot",
+      "description": "A completed wine lot record with the final winner details",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier of the completed lot"
+        },
+        "wineId": {
+          "type": "string",
+          "description": "Active wine document ID"
+        },
+        "name": {
+          "type": "string",
+          "description": "Wine brand name"
+        },
+        "imageUrl": {
+          "type": "string",
+          "description": "Wine image URL"
+        },
+        "startingPrice": {
+          "type": "number",
+          "description": "Starting price of the wine lot"
+        },
+        "finalPrice": {
+          "type": "number",
+          "description": "Final auction closing price"
+        },
+        "winnerId": {
+          "type": "string",
+          "description": "Bidder ID of the winner"
+        },
+        "winnerName": {
+          "type": "string",
+          "description": "Name of the winning bidder"
+        },
+        "winnerPhone": {
+          "type": "string",
+          "description": "Phone number of the winning bidder"
+        },
+        "endedAt": {
+          "type": "number",
+          "description": "Epoch timestamp when auction ended"
+        }
+      },
+      "required": ["id", "wineId", "name", "imageUrl", "startingPrice", "finalPrice", "endedAt"]
+    }
+  },
+  "firestore": {
+    "bidders/{bidderId}": {
+      "schema": "Bidder",
+      "description": "Collection of all registered bidders"
+    },
+    "auctions/{auctionId}": {
+      "schema": "WineItem",
+      "description": "Collection hosting the active auction item"
+    },
+    "bids/{bidId}": {
+      "schema": "BidRecord",
+      "description": "Collection hosting all historic bidding records"
+    },
+    "completed_lots/{lotId}": {
+      "schema": "CompletedLot",
+      "description": "Collection hosting all completed auction lots with their winners"
+    }
+  }
+}
