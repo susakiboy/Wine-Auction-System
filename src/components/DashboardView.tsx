@@ -18,7 +18,9 @@ import {
   ShieldCheck,
   Download,
   Trash2,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Maximize2,
+  X
 } from 'lucide-react';
 import { 
   db, 
@@ -46,7 +48,7 @@ export default function DashboardView({ wine, bids, onViewChange }: DashboardVie
   // New states for the active tabs and completed lots history
   const [activeTab, setActiveTab] = useState<'live' | 'winners'>('live');
   const [completedLots, setCompletedLots] = useState<CompletedLot[]>([]);
-  const [isEnding, setIsEnding] = useState<boolean>(false);
+  const [isQrFullscreen, setIsQrFullscreen] = useState<boolean>(false);
 
   // Real-time Firestore Sync for completed lots history
   useEffect(() => {
@@ -62,61 +64,6 @@ export default function DashboardView({ wine, bids, onViewChange }: DashboardVie
     });
     return () => unsubscribe();
   }, []);
-
-  const handleEndAuction = async () => {
-    if (!wine) return;
-    if (wine.status === 'ended') {
-      alert('การประมูลล็อตนี้ถูกปิดไปแล้ว');
-      return;
-    }
-
-    const confirmEnd = window.confirm(`🚨 คุณต้องการปิดประมูลล็อต "${wine.name}" ใช่หรือไม่?\nการดำเนินการนี้จะปิดรับยอดราคา และบันทึกประวัติผู้ชนะล็อตทันที`);
-    if (!confirmEnd) return;
-
-    setIsEnding(true);
-    try {
-      // 1. Fetch winner phone number from the bidders collection
-      let winnerPhone = null;
-      if (wine.highestBidderId) {
-        const bidderDoc = await getDoc(doc(db, 'bidders', wine.highestBidderId));
-        if (bidderDoc.exists()) {
-          winnerPhone = bidderDoc.data().phone;
-        }
-      }
-
-      // 2. Add document to completed_lots collection
-      const completedLotId = `lot_${Date.now()}`;
-      const newCompletedLot: CompletedLot = {
-        id: completedLotId,
-        wineId: wine.id,
-        name: wine.name,
-        imageUrl: wine.imageUrl || '',
-        startingPrice: wine.startingPrice,
-        finalPrice: wine.currentBid,
-        winnerId: wine.highestBidderId || 'ไม่มีผู้เสนอราคา',
-        winnerName: wine.highestBidderName || 'ไม่มีผู้ชนะ',
-        winnerPhone: winnerPhone || 'ไม่มีเบอร์โทรศัพท์',
-        endedAt: Date.now()
-      };
-
-      await setDoc(doc(db, 'completed_lots', completedLotId), newCompletedLot);
-
-      // 3. Mark the active wine as ended
-      await setDoc(doc(db, 'auctions', 'active_wine'), {
-        ...wine,
-        status: 'ended',
-        updatedAt: Date.now()
-      });
-
-      alert(`🎉 ปิดประมูลและบันทึกผู้ชนะประมูลล็อต "${wine.name}" เรียบร้อยแล้ว!`);
-      setActiveTab('winners'); // Automatically switch to the winners list dashboard
-    } catch (err: any) {
-      console.error("Error closing auction: ", err);
-      alert("เกิดข้อผิดพลาดในการปิดประมูล: " + err.message);
-    } finally {
-      setIsEnding(false);
-    }
-  };
 
   const handleDeleteCompletedLot = async (lotId: string) => {
     if (!window.confirm('⚠️ คุณแน่ใจหรือไม่ที่จะลบข้อมูลรายงานผู้ชนะของล็อตนี้? การกระทำนี้ไม่สามารถย้อนคืนได้')) return;
@@ -488,16 +435,31 @@ export default function DashboardView({ wine, bids, onViewChange }: DashboardVie
                 </p>
                 
                 {/* QR Code Frame */}
-                <div className="p-3 bg-[#fbf9ec] rounded-2xl border border-gold-400/30 shadow-lg flex items-center justify-center">
+                <div className="relative group p-3 bg-[#fbf9ec] rounded-2xl border border-gold-400/30 shadow-lg flex items-center justify-center cursor-pointer overflow-hidden" onClick={() => setIsQrFullscreen(true)}>
                   <img 
                     src={qrCodeUrl} 
                     alt="Registration QR Code" 
-                    className="w-[150px] h-[150px] object-contain"
+                    className="w-[150px] h-[150px] object-contain transition-transform group-hover:scale-105"
                   />
+                  <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-1.5 text-stone-200">
+                    <Maximize2 className="w-6 h-6 text-gold-400 animate-pulse" />
+                    <span className="text-[11px] font-medium font-sans">ดูรูปขนาดเต็ม</span>
+                  </div>
                 </div>
+
+                {/* Fullscreen Button */}
+                <button
+                  type="button"
+                  id="btn-dashboard-fullscreen-qr"
+                  onClick={() => setIsQrFullscreen(true)}
+                  className="mt-4 flex items-center gap-2 px-4 py-2 bg-[#120e10]/80 hover:bg-[#201517] border border-gold-400/10 hover:border-gold-400/35 text-stone-300 hover:text-gold-300 rounded-xl text-xs transition-all cursor-pointer shadow-md"
+                >
+                  <Maximize2 className="w-3.5 h-3.5 text-gold-400" />
+                  <span className="font-sans">ดูคิวอาร์โค้ดแบบเต็มจอ (Fullscreen)</span>
+                </button>
                 
                 {/* Direct Link Info */}
-                <div className="mt-3 text-[10px] text-stone-500 font-mono select-all truncate max-w-full hover:text-stone-300 transition-colors">
+                <div className="mt-3.5 text-[10px] text-stone-500 font-mono select-all truncate max-w-full hover:text-stone-300 transition-colors">
                   {mobileUrl}
                 </div>
               </div>
@@ -555,20 +517,16 @@ export default function DashboardView({ wine, bids, onViewChange }: DashboardVie
                   )}
                 </div>
 
-                {/* End Auction Button */}
+                 {/* Live Status Display */}
                 {wine.status === 'active' ? (
-                  <button
-                    onClick={handleEndAuction}
-                    disabled={isEnding}
-                    className="mt-6 w-full py-3.5 px-6 rounded-2xl bg-gradient-to-r from-wine-800 to-wine-950 hover:from-wine-700 hover:to-wine-900 border border-gold-400/20 text-gold-200 hover:text-white text-xs font-mono font-bold uppercase tracking-widest cursor-pointer shadow-xl transition-all flex items-center justify-center gap-2"
-                  >
-                    <Award className="w-4 h-4 text-gold-400" />
-                    <span>{isEnding ? 'กำลังบันทึกและปิดประมูล...' : 'ปิดประมูลล็อตนี้ (End Auction)'}</span>
-                  </button>
+                  <div className="mt-6 p-4 bg-emerald-500/5 border border-emerald-500/20 rounded-2xl flex items-center justify-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping shrink-0" />
+                    <span className="text-xs font-mono font-semibold tracking-wider text-emerald-400">🟢 กำลังเปิดรับยอดราคาประมูลสดแบบเรียลไทม์...</span>
+                  </div>
                 ) : (
-                  <div className="mt-6 p-4 bg-amber-500/10 border border-amber-500/20 rounded-2xl">
+                  <div className="mt-6 p-4 bg-amber-500/5 border border-amber-500/25 rounded-2xl text-center">
                     <span className="text-[10px] font-mono uppercase text-amber-400 block mb-1">Lot Status</span>
-                    <span className="text-xs font-semibold text-amber-300">🔒 ปิดประมูลและบันทึกผลล็อตนี้แล้ว</span>
+                    <span className="text-xs font-semibold text-amber-300">🔒 ปิดประมูลและบันทึกผลล็อตนี้เสร็จสิ้นแล้ว</span>
                   </div>
                 )}
               </div>
@@ -656,6 +614,60 @@ export default function DashboardView({ wine, bids, onViewChange }: DashboardVie
           </div>
         </div>
       </footer>
+
+      {/* Immersive Fullscreen QR Code Overlay Modal */}
+      {isQrFullscreen && (
+        <div 
+          className="fixed inset-0 z-50 bg-black/95 backdrop-blur-md flex flex-col items-center justify-center p-6 animate-fade-in"
+          onClick={() => setIsQrFullscreen(false)}
+        >
+          {/* Main Modal Container */}
+          <div 
+            className="relative bg-[#0a0a0a] border border-gold-400/20 p-8 md:p-12 rounded-3xl max-w-lg w-full text-center shadow-2xl flex flex-col items-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Close Button */}
+            <button
+              type="button"
+              onClick={() => setIsQrFullscreen(false)}
+              className="absolute top-4 right-4 p-2.5 bg-[#141414] hover:bg-[#222222] text-stone-400 hover:text-white rounded-full transition-colors cursor-pointer border border-stone-800"
+              title="ปิดหน้าต่าง"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-2.5 mb-2 mt-4">
+              <QrCode className="w-7 h-7 text-gold-400 animate-pulse" />
+              <h3 className="text-xl font-serif text-gold-300 font-medium tracking-wide">
+                สแกนเข้าร่วมการประมูลสด
+              </h3>
+            </div>
+            
+            <p className="text-xs text-stone-400 mb-8 max-w-sm">
+              เปิดแอปกล้องหรือแอปสแกนคิวอาร์โค้ดบนมือถือ เพื่อลงทะเบียนและเคาะราคาสดทันที
+            </p>
+
+            {/* Immersive Large QR Code Frame */}
+            <div className="p-6 bg-[#fbf9ec] rounded-3xl border border-gold-400/40 shadow-2xl flex items-center justify-center max-w-[340px] w-full aspect-square">
+              <img 
+                src={qrCodeUrl} 
+                alt="Registration QR Code Fullscreen" 
+                className="w-full h-full object-contain"
+              />
+            </div>
+
+            {/* Sub-label Link display */}
+            <div className="mt-8 w-full text-left">
+              <span className="text-[9px] uppercase tracking-widest text-stone-500 font-mono block mb-1.5 text-center">
+                Link URL สำหรับเชื่อมต่อ
+              </span>
+              <div className="text-xs text-stone-300 font-mono select-all bg-[#121212] py-2.5 px-4 rounded-xl border border-stone-900 truncate text-center">
+                {mobileUrl}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

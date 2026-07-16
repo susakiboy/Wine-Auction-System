@@ -4,11 +4,12 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { WineItem, Bidder, BidRecord, AppView } from '../types';
+import { WineItem, Bidder, BidRecord, AppView, CompletedLot } from '../types';
 import { 
   db, 
   doc, 
   setDoc, 
+  getDoc,
   collection, 
   getDocs, 
   writeBatch,
@@ -34,7 +35,8 @@ import {
   Trash2,
   X,
   Lock,
-  LogOut
+  LogOut,
+  Award
 } from 'lucide-react';
 
 interface AdminViewProps {
@@ -186,6 +188,62 @@ export default function AdminView({ wine, bids, onViewChange }: AdminViewProps) 
     } catch (err: any) {
       console.error(err);
       triggerStatus('เกิดข้อผิดพลาดในการลบผู้ลงทะเบียน', true);
+    }
+  };
+
+  const [isEnding, setIsEnding] = useState<boolean>(false);
+
+  const handleEndAuction = async () => {
+    if (!wine) return;
+    if (wine.status === 'ended') {
+      alert('การประมูลล็อตนี้ถูกปิดไปแล้ว');
+      return;
+    }
+
+    const confirmEnd = window.confirm(`🚨 คุณต้องการปิดประมูลล็อต "${wine.name}" ใช่หรือไม่?\nการดำเนินการนี้จะปิดรับยอดราคา และบันทึกประวัติผู้ชนะล็อตทันที`);
+    if (!confirmEnd) return;
+
+    setIsEnding(true);
+    try {
+      // 1. Fetch winner phone number from the bidders collection
+      let winnerPhone = null;
+      if (wine.highestBidderId) {
+        const bidderDoc = await getDoc(doc(db, 'bidders', wine.highestBidderId));
+        if (bidderDoc.exists()) {
+          winnerPhone = bidderDoc.data().phone;
+        }
+      }
+
+      // 2. Add document to completed_lots collection
+      const completedLotId = `lot_${Date.now()}`;
+      const newCompletedLot: CompletedLot = {
+        id: completedLotId,
+        wineId: wine.id,
+        name: wine.name,
+        imageUrl: wine.imageUrl || '',
+        startingPrice: wine.startingPrice,
+        finalPrice: wine.currentBid,
+        winnerId: wine.highestBidderId || 'ไม่มีผู้เสนอราคา',
+        winnerName: wine.highestBidderName || 'ไม่มีผู้ชนะ',
+        winnerPhone: winnerPhone || 'ไม่มีเบอร์โทรศัพท์',
+        endedAt: Date.now()
+      };
+
+      await setDoc(doc(db, 'completed_lots', completedLotId), newCompletedLot);
+
+      // 3. Mark the active wine as ended
+      await setDoc(doc(db, 'auctions', 'active_wine'), {
+        ...wine,
+        status: 'ended',
+        updatedAt: Date.now()
+      });
+
+      alert(`🎉 ปิดประมูลและบันทึกผู้ชนะประมูลล็อต "${wine.name}" เรียบร้อยแล้ว!`);
+    } catch (err: any) {
+      console.error("Error closing auction: ", err);
+      alert("เกิดข้อผิดพลาดในการปิดประมูล: " + err.message);
+    } finally {
+      setIsEnding(false);
     }
   };
 
@@ -469,8 +527,79 @@ export default function AdminView({ wine, bids, onViewChange }: AdminViewProps) 
       {/* Admin Content Area */}
       <main className="flex-grow p-6 lg:p-8 max-w-7xl mx-auto w-full z-10 grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
         
-        {/* Left Side: Wine Lot Config Form (7 Cols) */}
-        <div className="lg:col-span-7 bg-[#0a0a0a] rounded-3xl border border-gold-400/20 p-6 shadow-2xl space-y-6">
+        {/* Left Side: Active Status & Config Form (7 Cols) */}
+        <div className="lg:col-span-7 space-y-6">
+          
+          {/* Active Live Auction Control Panel */}
+          {wine && (
+            <div className="bg-[#0a0a0a] rounded-3xl border border-wine-900/40 p-6 shadow-2xl space-y-4 relative overflow-hidden">
+              <div className="absolute top-0 left-0 h-1 w-full bg-gradient-to-r from-wine-800 via-gold-400 to-wine-800" />
+              
+              <div className="flex items-center justify-between border-b border-gold-400/10 pb-3">
+                <div className="flex items-center gap-2">
+                  <Award className="w-5 h-5 text-gold-400" />
+                  <h2 className="text-md font-serif font-medium text-stone-100">แผงควบคุมสถานะและปิดประมูลสด</h2>
+                </div>
+                <span className={`text-[9px] font-mono px-2.5 py-0.5 rounded-full border uppercase tracking-wider ${
+                  wine.status === 'active' 
+                    ? 'bg-emerald-950/40 text-emerald-400 border-emerald-500/20 animate-pulse' 
+                    : 'bg-stone-900/60 text-stone-500 border-stone-800'
+                }`}>
+                  {wine.status === 'active' ? '🟢 LIVE NOW' : '🔒 ENDED'}
+                </span>
+              </div>
+
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-[#120d0f]/40 p-4 rounded-2xl border border-wine-900/20">
+                <div className="flex items-center gap-3">
+                  <div className="w-14 h-14 rounded-xl bg-[#1a1a1a] border border-gold-400/10 overflow-hidden shrink-0 flex items-center justify-center">
+                    <img 
+                      src={wine.imageUrl || "https://images.unsplash.com/photo-1510812431401-41d2bd2722f3?auto=format&fit=crop&q=80&w=805"} 
+                      alt={wine.name} 
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1510812431401-41d2bd2722f3?auto=format&fit=crop&q=80&w=805";
+                      }}
+                    />
+                  </div>
+                  <div className="text-left">
+                    <h3 className="text-sm font-semibold text-stone-200 line-clamp-1">{wine.name}</h3>
+                    <p className="text-xs text-stone-400 mt-1 flex flex-wrap gap-x-2 gap-y-0.5">
+                      <span>ราคากลางตั้งต้น: ฿{wine.startingPrice.toLocaleString()}</span>
+                      <span className="text-wine-400">•</span>
+                      <span>เสนอราคาสูงสุด: <strong className="text-gold-400 font-mono">฿{wine.currentBid.toLocaleString()}</strong></span>
+                    </p>
+                    {wine.highestBidderId ? (
+                      <p className="text-[10px] text-stone-500 mt-0.5">
+                        ผู้เสนอราคาสูงสุด: ID {wine.highestBidderId} ({wine.highestBidderName})
+                      </p>
+                    ) : (
+                      <p className="text-[10px] text-stone-500 mt-0.5">ยังไม่มีผู้เสนอราคา</p>
+                    )}
+                  </div>
+                </div>
+
+                {wine.status === 'active' ? (
+                  <button
+                    type="button"
+                    id="btn-admin-end-auction"
+                    disabled={isEnding}
+                    onClick={handleEndAuction}
+                    className="w-full sm:w-auto px-5 py-3 rounded-xl bg-gradient-to-r from-wine-800 to-wine-950 hover:from-wine-700 hover:to-wine-900 border border-gold-400/20 text-gold-200 hover:text-white text-xs font-mono font-bold uppercase tracking-wider cursor-pointer shadow-lg hover:scale-105 active:scale-95 transition-all flex items-center justify-center gap-1.5 shrink-0"
+                  >
+                    <Award className="w-4 h-4 text-gold-400 animate-pulse" />
+                    <span>{isEnding ? 'กำลังปิดประมูล...' : 'ปิดประมูลล็อตนี้'}</span>
+                  </button>
+                ) : (
+                  <div className="w-full sm:w-auto text-center px-4 py-2 bg-stone-900/60 border border-stone-800 text-stone-500 rounded-xl text-xs font-semibold shrink-0">
+                    🔒 การประมูลล็อตนี้สิ้นสุดลงแล้ว
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Wine Lot Config Form (Card Container) */}
+          <div className="bg-[#0a0a0a] rounded-3xl border border-gold-400/20 p-6 shadow-2xl space-y-6">
           <div className="flex items-center justify-between border-b border-gold-400/10 pb-4">
             <div className="flex items-center gap-2">
               <Settings className="w-5 h-5 text-gold-400" />
@@ -652,6 +781,7 @@ export default function AdminView({ wine, bids, onViewChange }: AdminViewProps) 
             </div>
           </form>
         </div>
+      </div>
 
         {/* Right Side: Registered Bidders Listing (5 Cols) */}
         <div className="lg:col-span-5 bg-[#0a0a0a] rounded-3xl border border-gold-400/20 p-6 shadow-2xl flex flex-col min-h-[400px]">
