@@ -429,53 +429,82 @@ export default function DashboardView({ wine, bids, onViewChange }: DashboardVie
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
             
-            {/* Left Side: Wine Bottle Showcase (4 Cols) */}
-            <div className="lg:col-span-5 bg-[#0a0a0a] p-6 rounded-3xl border border-gold-400/20 shadow-2xl flex flex-col items-center relative overflow-hidden group">
-              <div className="absolute top-4 left-4 text-[10px] uppercase tracking-[0.2em] text-gold-400 font-mono bg-black/60 px-2.5 py-1 rounded border border-gold-400/20 z-10">
-                Lot #{wine.status === 'ended' ? 'Ended' : 'Active'}
-              </div>
-              
-              {/* Product Frame with glow */}
-              <div className="w-full aspect-[4/5] rounded-2xl overflow-hidden bg-gradient-to-b from-[#1a1a1a] to-[#0a0a0a] border border-gold-400/10 relative shadow-inner flex items-center justify-center">
-                <img 
-                  src={wine.imageUrl || defaultWineImage} 
-                  alt={wine.name}
-                  className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).src = defaultWineImage;
-                  }}
-                  referrerPolicy="no-referrer"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0a] via-transparent to-black/20" />
+            {/* Left Side: Wine Bottle Showcase & QR Code (5 Cols) */}
+            <div className="lg:col-span-5 flex flex-col gap-6">
+              <div className="bg-[#0a0a0a] p-6 rounded-3xl border border-gold-400/20 shadow-2xl flex flex-col items-center relative overflow-hidden group">
+                <div className="absolute top-4 left-4 text-[10px] uppercase tracking-[0.2em] text-gold-400 font-mono bg-black/60 px-2.5 py-1 rounded border border-gold-400/20 z-10">
+                  Lot #{wine.status === 'ended' ? 'Ended' : 'Active'}
+                </div>
                 
-                {/* Float item details on image bottom */}
-                <div className="absolute bottom-5 left-5 right-5 text-left">
-                  <span className="text-[10px] font-mono text-gold-400 tracking-[0.2em] block mb-1">PREMIUM SELECTION</span>
-                  <h3 className="text-2xl md:text-3xl font-serif text-white leading-tight font-medium tracking-wide">
-                    {wine.name}
-                  </h3>
+                {/* Product Frame with glow */}
+                <div className="w-full aspect-[4/5] rounded-2xl overflow-hidden bg-gradient-to-b from-[#1a1a1a] to-[#0a0a0a] border border-gold-400/10 relative shadow-inner flex items-center justify-center">
+                  <img 
+                    src={wine.imageUrl || defaultWineImage} 
+                    alt={wine.name}
+                    className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = defaultWineImage;
+                    }}
+                    referrerPolicy="no-referrer"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0a] via-transparent to-black/20" />
+                  
+                  {/* Float item details on image bottom */}
+                  <div className="absolute bottom-5 left-5 right-5 text-left">
+                    <span className="text-[10px] font-mono text-gold-400 tracking-[0.2em] block mb-1">PREMIUM SELECTION</span>
+                    <h3 className="text-2xl md:text-3xl font-serif text-white leading-tight font-medium tracking-wide">
+                      {wine.name}
+                    </h3>
+                  </div>
+                </div>
+
+                {/* Price baseline info */}
+                <div className="w-full grid grid-cols-2 gap-4 mt-6 border-t border-gold-400/10 pt-5">
+                  <div className="text-left">
+                    <span className="text-[10px] uppercase tracking-widest text-stone-400 block mb-1 font-mono">Starting Price</span>
+                    <span className="text-xl font-light text-stone-200">
+                      ฿{wine.startingPrice.toLocaleString('th-TH')}
+                    </span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[10px] uppercase tracking-widest text-stone-400 block mb-1 font-mono">Increment step</span>
+                    <span className="text-xl font-light text-gold-400">
+                      +฿{(wine.bidIncrementSteps[0] || 500).toLocaleString('th-TH')}
+                    </span>
+                  </div>
                 </div>
               </div>
 
-              {/* Price baseline info */}
-              <div className="w-full grid grid-cols-2 gap-4 mt-6 border-t border-gold-400/10 pt-5">
-                <div className="text-left">
-                  <span className="text-[10px] uppercase tracking-widest text-stone-400 block mb-1 font-mono">Starting Price</span>
-                  <span className="text-xl font-light text-stone-200">
-                    ฿{wine.startingPrice.toLocaleString('th-TH')}
-                  </span>
+              {/* QR Code Board */}
+              <div className="bg-[#0a0a0a] p-6 rounded-3xl border border-gold-400/20 shadow-xl flex flex-col items-center text-center">
+                <div className="flex items-center gap-2 mb-3">
+                  <QrCode className="w-5 h-5 text-gold-400" />
+                  <h4 className="text-[10px] font-mono tracking-[0.2em] text-gold-400 uppercase">
+                    SCAN TO BID LIVE
+                  </h4>
                 </div>
-                <div className="text-right">
-                  <span className="text-[10px] uppercase tracking-widest text-stone-400 block mb-1 font-mono">Increment step</span>
-                  <span className="text-xl font-light text-gold-400">
-                    +฿{(wine.bidIncrementSteps[0] || 500).toLocaleString('th-TH')}
-                  </span>
+                <p className="text-xs text-stone-400 mb-4 max-w-xs font-sans">
+                  สแกนเพื่อลงทะเบียนและเข้าร่วมเคาะราคาประมูลแบบเรียลไทม์
+                </p>
+                
+                {/* QR Code Frame */}
+                <div className="p-3 bg-[#fbf9ec] rounded-2xl border border-gold-400/30 shadow-lg flex items-center justify-center">
+                  <img 
+                    src={qrCodeUrl} 
+                    alt="Registration QR Code" 
+                    className="w-[150px] h-[150px] object-contain"
+                  />
+                </div>
+                
+                {/* Direct Link Info */}
+                <div className="mt-3 text-[10px] text-stone-500 font-mono select-all truncate max-w-full hover:text-stone-300 transition-colors">
+                  {mobileUrl}
                 </div>
               </div>
             </div>
 
-            {/* Middle: Active Auction Stats (4 Cols) */}
-            <div className="lg:col-span-4 flex flex-col gap-6">
+            {/* Right Side: Active Auction & Bid History (7 Cols) */}
+            <div className="lg:col-span-7 flex flex-col gap-6">
               
               {/* Grand Live Bid Panel */}
               <div className="bg-[#0f0f0f] p-8 rounded-3xl border border-gold-400/20 shadow-2xl text-center relative overflow-hidden">
@@ -544,99 +573,72 @@ export default function DashboardView({ wine, bids, onViewChange }: DashboardVie
                 )}
               </div>
 
-              {/* QR Code Board */}
-              <div className="bg-[#0a0a0a] p-6 rounded-3xl border border-gold-400/20 shadow-xl flex flex-col items-center text-center">
-                <div className="flex items-center gap-2 mb-3">
-                  <QrCode className="w-5 h-5 text-gold-400" />
-                  <h4 className="text-[10px] font-mono tracking-[0.2em] text-gold-400 uppercase">
-                    SCAN TO BID LIVE
-                  </h4>
-                </div>
-                <p className="text-xs text-stone-400 mb-4 max-w-xs font-sans">
-                  สแกนเพื่อลงทะเบียนและเข้าร่วมเคาะราคาประมูลแบบเรียลไทม์
-                </p>
-                
-                {/* QR Code Frame */}
-                <div className="p-3 bg-[#fbf9ec] rounded-2xl border border-gold-400/30 shadow-lg flex items-center justify-center">
-                  <img 
-                    src={qrCodeUrl} 
-                    alt="Registration QR Code" 
-                    className="w-[150px] h-[150px] object-contain"
-                  />
-                </div>
-                
-                {/* Direct Link Info */}
-                <div className="mt-3 text-[10px] text-stone-500 font-mono select-all truncate max-w-full hover:text-stone-300 transition-colors">
-                  {mobileUrl}
-                </div>
-              </div>
-
-            </div>
-
-            {/* Right Side: Bid History Log (3 Cols) */}
-            <div className="lg:col-span-3 bg-[#0a0a0a] p-6 rounded-3xl border border-gold-400/20 shadow-2xl flex flex-col h-full min-h-[450px]">
-              <div className="flex items-center justify-between border-b border-gold-400/10 pb-4 mb-4">
-                <div className="flex items-center gap-2">
-                  <History className="w-4 h-4 text-gold-400" />
-                  <h3 className="text-xs font-mono tracking-[0.15em] text-stone-300 uppercase">
-                    BID HISTORY
-                  </h3>
-                </div>
-                <span className="text-[10px] bg-wine-900/40 text-gold-400 font-mono px-2 py-0.5 rounded-full border border-wine-800/40">
-                  {bids.length} เคาะ
-                </span>
-              </div>
-
-              {/* Timeline list */}
-              <div className="flex-grow overflow-y-auto space-y-3 max-h-[400px] pr-1">
-                {bids.length === 0 ? (
-                  <div className="h-full flex flex-col items-center justify-center text-center py-20 text-stone-500">
-                    <TrendingUp className="w-8 h-8 opacity-25 mb-2 text-wine-500" />
-                    <p className="text-xs font-light">รอผู้ประมูลเคาะราคาแรก...</p>
+              {/* Right Side: Bid History Log (Now below live panel) */}
+              <div className="bg-[#0a0a0a] p-6 rounded-3xl border border-gold-400/20 shadow-2xl flex flex-col h-[400px]">
+                <div className="flex items-center justify-between border-b border-gold-400/10 pb-4 mb-4">
+                  <div className="flex items-center gap-2">
+                    <History className="w-4 h-4 text-gold-400" />
+                    <h3 className="text-xs font-mono tracking-[0.15em] text-stone-300 uppercase">
+                      BID HISTORY
+                    </h3>
                   </div>
-                ) : (
-                  bids.map((b, idx) => (
-                    <div 
-                      key={b.id || idx}
-                      className={`p-3.5 rounded-xl border transition-all flex items-center justify-between ${
-                        idx === 0 
-                          ? 'bg-gradient-to-r from-wine-950 to-[#120507] border-gold-400/40 shadow-lg scale-[1.02]' 
-                          : 'bg-[#141414]/40 border-gold-400/5 hover:bg-[#1f1f1f]/60'
-                      }`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center font-mono text-xs font-bold ${
-                          idx === 0 
-                            ? 'bg-gold-500 text-stone-900' 
-                            : 'bg-wine-900 text-stone-300'
-                        }`}>
-                          {b.bidderId}
-                        </div>
-                        <div className="text-left">
-                          <span className="text-xs font-semibold block text-stone-200">
-                            {b.bidderName}
-                          </span>
-                          <span className="text-[10px] text-stone-400 font-mono">
-                            {new Date(b.timestamp).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <span className={`font-mono text-sm font-bold block ${
-                          idx === 0 ? 'text-gold-300' : 'text-stone-300'
-                        }`}>
-                          ฿{b.amount.toLocaleString('th-TH')}
-                        </span>
-                        {idx === 0 && (
-                          <span className="text-[9px] text-wine-400 font-mono font-medium tracking-wider uppercase block">
-                            LEADER
-                          </span>
-                        )}
-                      </div>
+                  <span className="text-[10px] bg-wine-900/40 text-gold-400 font-mono px-2 py-0.5 rounded-full border border-wine-800/40">
+                    {bids.length} เคาะ
+                  </span>
+                </div>
+
+                {/* Timeline list */}
+                <div className="flex-grow overflow-y-auto space-y-3 pr-1">
+                  {bids.length === 0 ? (
+                    <div className="h-full flex flex-col items-center justify-center text-center py-20 text-stone-500">
+                      <TrendingUp className="w-8 h-8 opacity-25 mb-2 text-wine-500" />
+                      <p className="text-xs font-light">รอผู้ประมูลเคาะราคาแรก...</p>
                     </div>
-                  ))
-                )}
+                  ) : (
+                    bids.map((b, idx) => (
+                      <div 
+                        key={b.id || idx}
+                        className={`p-3.5 rounded-xl border transition-all flex items-center justify-between ${
+                          idx === 0 
+                            ? 'bg-gradient-to-r from-wine-950 to-[#120507] border-gold-400/40 shadow-lg scale-[1.02]' 
+                            : 'bg-[#141414]/40 border-gold-400/5 hover:bg-[#1f1f1f]/60'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center font-mono text-xs font-bold ${
+                            idx === 0 
+                              ? 'bg-gold-500 text-stone-900' 
+                              : 'bg-wine-900 text-stone-300'
+                          }`}>
+                            {b.bidderId}
+                          </div>
+                          <div className="text-left">
+                            <span className="text-xs font-semibold block text-stone-200">
+                              {b.bidderName}
+                            </span>
+                            <span className="text-[10px] text-stone-400 font-mono">
+                              {new Date(b.timestamp).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <span className={`font-mono text-sm font-bold block ${
+                            idx === 0 ? 'text-gold-300' : 'text-stone-300'
+                          }`}>
+                            ฿{b.amount.toLocaleString('th-TH')}
+                          </span>
+                          {idx === 0 && (
+                            <span className="text-[9px] text-wine-400 font-mono font-medium tracking-wider uppercase block">
+                              LEADER
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
               </div>
+
             </div>
 
           </div>

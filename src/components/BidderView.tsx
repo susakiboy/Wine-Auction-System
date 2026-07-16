@@ -245,14 +245,16 @@ export default function BidderView({ wine, bids, onViewChange }: BidderViewProps
         </div>
 
         <div className="flex items-center gap-2">
-          <button
-            id="btn-switch-dashboard-mobile"
-            onClick={() => onViewChange('dashboard')}
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#141414] text-xs text-stone-300 border border-gold-400/10 hover:bg-[#1e1e1e]"
-          >
-            <Tv className="w-3.5 h-3.5 text-gold-400" />
-            <span className="hidden sm:inline font-mono">จอกลาง</span>
-          </button>
+          {localStorage.getItem('scanned_bidder') !== 'true' && (
+            <button
+              id="btn-switch-dashboard-mobile"
+              onClick={() => onViewChange('dashboard')}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#141414] text-xs text-stone-300 border border-gold-400/10 hover:bg-[#1e1e1e]"
+            >
+              <Tv className="w-3.5 h-3.5 text-gold-400" />
+              <span className="hidden sm:inline font-mono">จอกลาง</span>
+            </button>
+          )}
           
           {currentUser && (
             <button

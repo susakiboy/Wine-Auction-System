@@ -32,7 +32,9 @@ import {
   Check,
   Edit,
   Trash2,
-  X
+  X,
+  Lock,
+  LogOut
 } from 'lucide-react';
 
 interface AdminViewProps {
@@ -70,6 +72,32 @@ const WINE_PRESETS = [
 ];
 
 export default function AdminView({ wine, bids, onViewChange }: AdminViewProps) {
+  // Admin Login States
+  const [isAdminLoggedIn, setIsAdminLoggedIn] = useState<boolean>(() => {
+    return localStorage.getItem('admin_authenticated') === 'true';
+  });
+  const [username, setUsername] = useState<string>('');
+  const [password, setPassword] = useState<string>('');
+  const [loginError, setLoginError] = useState<string>('');
+
+  const handleLoginSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (username === 'Administrator' && password === 'm2k3ddhpsk') {
+      setIsAdminLoggedIn(true);
+      localStorage.setItem('admin_authenticated', 'true');
+      setLoginError('');
+    } else {
+      setLoginError('ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง');
+    }
+  };
+
+  const handleLogout = () => {
+    setIsAdminLoggedIn(false);
+    localStorage.removeItem('admin_authenticated');
+    setUsername('');
+    setPassword('');
+  };
+
   // Input fields state
   const [wineName, setWineName] = useState<string>('');
   const [imageUrl, setImageUrl] = useState<string>('');
@@ -297,6 +325,95 @@ export default function AdminView({ wine, bids, onViewChange }: AdminViewProps) 
     }
   };
 
+  if (!isAdminLoggedIn) {
+    return (
+      <div className="min-h-screen bg-[#0d090a] text-stone-100 font-sans flex flex-col items-center justify-center p-6 relative overflow-hidden">
+        {/* Decorative glowing background elements */}
+        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] rounded-full bg-wine-900/10 blur-[150px] pointer-events-none" />
+        <div className="absolute bottom-1/4 left-1/3 w-[300px] h-[300px] rounded-full bg-gold-500/5 blur-[120px] pointer-events-none" />
+
+        <div className="w-full max-w-md bg-[#0a0a0a] border border-gold-400/20 rounded-3xl p-8 shadow-2xl relative z-10 space-y-8 backdrop-blur-sm">
+          {/* Logo Brand Header */}
+          <div className="text-center space-y-2">
+            <div className="w-12 h-12 border-2 border-gold-400 rotate-45 flex items-center justify-center mx-auto mb-4">
+              <Lock className="w-5 h-5 text-gold-400 -rotate-45" />
+            </div>
+            <h1 className="text-2xl font-serif tracking-[0.2em] text-gold-400 uppercase leading-none font-medium">
+              VINTAGE RESERVE
+            </h1>
+            <p className="text-[10px] text-stone-400 font-mono tracking-widest uppercase">
+              ADMINISTRATOR GATEWAY
+            </p>
+          </div>
+
+          {/* Login Form */}
+          <form onSubmit={handleLoginSubmit} className="space-y-5">
+            <div className="space-y-1.5">
+              <label className="block text-xs font-mono uppercase tracking-wider text-stone-300">
+                ชื่อผู้ใช้ / Username
+              </label>
+              <input
+                id="admin-login-username"
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="ระบุชื่อผู้ใช้งานแอดมิน"
+                className="w-full bg-[#141414] border border-white/10 rounded-xl px-4 py-3 text-sm text-stone-100 placeholder-stone-600 focus:outline-none focus:border-gold-400 focus:ring-1 focus:ring-gold-400 transition-all font-sans"
+                required
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="block text-xs font-mono uppercase tracking-wider text-stone-300">
+                รหัสผ่าน / Password
+              </label>
+              <input
+                id="admin-login-password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="ระบุรหัสผ่านเข้าสู่ระบบ"
+                className="w-full bg-[#141414] border border-white/10 rounded-xl px-4 py-3 text-sm text-stone-100 placeholder-stone-600 focus:outline-none focus:border-gold-400 focus:ring-1 focus:ring-gold-400 transition-all font-sans"
+                required
+              />
+            </div>
+
+            {loginError && (
+              <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl text-xs text-rose-400 flex items-start gap-2 animate-fade-in font-sans">
+                <span className="shrink-0 mt-0.5">⚠️</span>
+                <span>{loginError}</span>
+              </div>
+            )}
+
+            <button
+              id="btn-admin-login-submit"
+              type="submit"
+              className="w-full py-3 px-6 rounded-xl bg-gradient-to-r from-wine-800 to-wine-950 hover:from-wine-700 hover:to-wine-900 border border-gold-400/20 text-gold-200 hover:text-white text-xs font-mono font-bold uppercase tracking-widest cursor-pointer shadow-lg transition-all"
+            >
+              เข้าสู่ระบบ / Authentication
+            </button>
+          </form>
+
+          {/* Quick exit option */}
+          <div className="border-t border-white/5 pt-4 text-center">
+            <button
+              id="btn-admin-login-back"
+              onClick={() => onViewChange('dashboard')}
+              className="text-xs text-stone-400 hover:text-gold-400 transition-colors font-mono uppercase tracking-wider cursor-pointer"
+            >
+              ← กลับไปยังหน้าจอแสดงผลหลัก
+            </button>
+          </div>
+        </div>
+
+        {/* Small System Status Stamp */}
+        <div className="mt-8 text-center text-[10px] font-mono text-stone-600 tracking-wider">
+          SECURED GATEWAY • VINTAGE RESERVE SYSTEM v1.0.4
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#0d090a] text-stone-100 font-sans flex flex-col justify-between overflow-x-hidden relative">
       <div className="absolute top-0 right-1/4 w-[450px] h-[450px] rounded-full bg-gold-500/5 blur-[120px] pointer-events-none" />
@@ -320,7 +437,7 @@ export default function AdminView({ wine, bids, onViewChange }: AdminViewProps) 
           </div>
 
           {/* Quick View Switches */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
             <button
               id="btn-admin-switch-dashboard"
               onClick={() => onViewChange('dashboard')}
@@ -336,6 +453,14 @@ export default function AdminView({ wine, bids, onViewChange }: AdminViewProps) 
             >
               <Smartphone className="w-4 h-4 text-gold-400" />
               <span>เปิดหน้าจอมือถือ</span>
+            </button>
+            <button
+              id="btn-admin-logout"
+              onClick={handleLogout}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#1a0f11] hover:bg-wine-950/60 border border-rose-500/20 text-rose-300 hover:text-rose-100 text-xs cursor-pointer transition-all font-mono tracking-wider uppercase text-[11px]"
+            >
+              <LogOut className="w-3.5 h-3.5 text-rose-400" />
+              <span>ออกจากระบบ</span>
             </button>
           </div>
         </div>

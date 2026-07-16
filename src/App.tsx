@@ -29,16 +29,32 @@ export default function App() {
   // Controls for the floating quick-view switcher
   const [isSwitcherOpen, setIsSwitcherOpen] = useState<boolean>(false);
 
+  // Track if the current device is a scanned bidder to enforce viewing restrictions
+  const [isScannedBidder, setIsScannedBidder] = useState<boolean>(() => {
+    return localStorage.getItem('scanned_bidder') === 'true';
+  });
+
   // 1. Listen to URL changes or scan query parameter on mount
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const mode = params.get('mode');
     if (mode === 'bid' || mode === 'bidder') {
+      localStorage.setItem('scanned_bidder', 'true');
+      setIsScannedBidder(true);
       setActiveView('bidder');
     } else if (mode === 'admin') {
+      localStorage.removeItem('scanned_bidder');
+      setIsScannedBidder(false);
       setActiveView('admin');
     } else if (mode === 'dashboard') {
-      setActiveView('dashboard');
+      if (localStorage.getItem('scanned_bidder') === 'true') {
+        setActiveView('bidder');
+        const url = new URL(window.location.href);
+        url.searchParams.set('mode', 'bidder');
+        window.history.pushState({}, '', url.toString());
+      } else {
+        setActiveView('dashboard');
+      }
     }
   }, []);
 
@@ -110,6 +126,16 @@ export default function App() {
 
   // Quick helper to switch view and update browser URL hash without full reload
   const handleViewChange = (view: AppView) => {
+    if (view === 'dashboard' && (isScannedBidder || localStorage.getItem('scanned_bidder') === 'true')) {
+      alert('ขออภัย ผู้เข้าร่วมประมูลที่เข้าใช้งานผ่านการสแกน QR Code ไม่ได้รับอนุญาตให้เข้าหน้าจอกลางนำเสนอ');
+      return;
+    }
+
+    if (view === 'admin') {
+      localStorage.removeItem('scanned_bidder');
+      setIsScannedBidder(false);
+    }
+
     setActiveView(view);
     
     // Update the URL query params so copying link or scanning QR code preserves state
@@ -145,83 +171,85 @@ export default function App() {
       {/* ======================================================== */}
       {/* QUICK ACCESSIBLE VIEW SWITCHER DOCK (FAB) */}
       {/* ======================================================== */}
-      <div className="fixed bottom-4 right-4 z-40">
-        <div className="flex flex-col items-end gap-2">
-          {/* Collapsible Switcher Menu */}
-          {isSwitcherOpen && (
-            <div className="bg-[#160f11]/95 backdrop-blur-md border border-wine-900/40 p-3 rounded-2xl shadow-2xl flex flex-col gap-2 min-w-[200px] animate-fade-in text-stone-200">
-              <div className="text-[10px] font-mono font-bold tracking-widest text-gold-400 px-2 py-1 border-b border-wine-950">
-                SATELLITE SWITCHER
-              </div>
-              
-              <button
-                id="fab-switch-dashboard"
-                onClick={() => {
-                  handleViewChange('dashboard');
-                  setIsSwitcherOpen(false);
-                }}
-                className={`flex items-center gap-2.5 w-full text-left px-3 py-2 text-xs rounded-xl transition-all cursor-pointer ${
-                  activeView === 'dashboard' 
-                    ? 'bg-wine-900/60 text-gold-300 font-semibold border border-wine-800/30' 
-                    : 'hover:bg-[#201517] text-stone-300'
-                }`}
-              >
-                <Tv className="w-4 h-4" />
-                <span>จอกลางนำเสนอ (Dashboard)</span>
-              </button>
+      {!isScannedBidder && (
+        <div className="fixed bottom-4 right-4 z-40">
+          <div className="flex flex-col items-end gap-2">
+            {/* Collapsible Switcher Menu */}
+            {isSwitcherOpen && (
+              <div className="bg-[#160f11]/95 backdrop-blur-md border border-wine-900/40 p-3 rounded-2xl shadow-2xl flex flex-col gap-2 min-w-[200px] animate-fade-in text-stone-200">
+                <div className="text-[10px] font-mono font-bold tracking-widest text-gold-400 px-2 py-1 border-b border-wine-950">
+                  SATELLITE SWITCHER
+                </div>
+                
+                <button
+                  id="fab-switch-dashboard"
+                  onClick={() => {
+                    handleViewChange('dashboard');
+                    setIsSwitcherOpen(false);
+                  }}
+                  className={`flex items-center gap-2.5 w-full text-left px-3 py-2 text-xs rounded-xl transition-all cursor-pointer ${
+                    activeView === 'dashboard' 
+                      ? 'bg-wine-900/60 text-gold-300 font-semibold border border-wine-800/30' 
+                      : 'hover:bg-[#201517] text-stone-300'
+                  }`}
+                >
+                  <Tv className="w-4 h-4" />
+                  <span>จอกลางนำเสนอ (Dashboard)</span>
+                </button>
 
-              <button
-                id="fab-switch-bidder"
-                onClick={() => {
-                  handleViewChange('bidder');
-                  setIsSwitcherOpen(false);
-                }}
-                className={`flex items-center gap-2.5 w-full text-left px-3 py-2 text-xs rounded-xl transition-all cursor-pointer ${
-                  activeView === 'bidder' 
-                    ? 'bg-wine-900/60 text-gold-300 font-semibold border border-wine-800/30' 
-                    : 'hover:bg-[#201517] text-stone-300'
-                }`}
-              >
-                <Smartphone className="w-4 h-4" />
-                <span>หน้าจอมือถือ (Bidder Portal)</span>
-              </button>
+                <button
+                  id="fab-switch-bidder"
+                  onClick={() => {
+                    handleViewChange('bidder');
+                    setIsSwitcherOpen(false);
+                  }}
+                  className={`flex items-center gap-2.5 w-full text-left px-3 py-2 text-xs rounded-xl transition-all cursor-pointer ${
+                    activeView === 'bidder' 
+                      ? 'bg-wine-900/60 text-gold-300 font-semibold border border-wine-800/30' 
+                      : 'hover:bg-[#201517] text-stone-300'
+                  }`}
+                >
+                  <Smartphone className="w-4 h-4" />
+                  <span>หน้าจอมือถือ (Bidder Portal)</span>
+                </button>
 
-              <button
-                id="fab-switch-admin"
-                onClick={() => {
-                  handleViewChange('admin');
-                  setIsSwitcherOpen(false);
-                }}
-                className={`flex items-center gap-2.5 w-full text-left px-3 py-2 text-xs rounded-xl transition-all cursor-pointer ${
-                  activeView === 'admin' 
-                    ? 'bg-wine-900/60 text-gold-300 font-semibold border border-wine-800/30' 
-                    : 'hover:bg-[#201517] text-stone-300'
-                }`}
-              >
-                <ShieldCheck className="w-4 h-4" />
-                <span>ส่วนแอดมิน (Admin Panel)</span>
-              </button>
-            </div>
-          )}
-
-          {/* Main Floating Trigger Button */}
-          <button
-            id="fab-trigger-menu"
-            onClick={() => setIsSwitcherOpen(!isSwitcherOpen)}
-            className="w-12 h-12 bg-gradient-to-br from-wine-800 to-wine-950 text-gold-300 hover:text-white rounded-full flex items-center justify-center shadow-2xl border border-wine-600/30 hover:scale-105 active:scale-95 transition-all cursor-pointer"
-            title="สลับหน้าจอทดสอบ"
-          >
-            {isSwitcherOpen ? (
-              <ChevronDown className="w-6 h-6" />
-            ) : (
-              <div className="relative">
-                <Layers className="w-5 h-5 animate-pulse" />
-                <span className="absolute -top-1.5 -right-1.5 w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+                <button
+                  id="fab-switch-admin"
+                  onClick={() => {
+                    handleViewChange('admin');
+                    setIsSwitcherOpen(false);
+                  }}
+                  className={`flex items-center gap-2.5 w-full text-left px-3 py-2 text-xs rounded-xl transition-all cursor-pointer ${
+                    activeView === 'admin' 
+                      ? 'bg-wine-900/60 text-gold-300 font-semibold border border-wine-800/30' 
+                      : 'hover:bg-[#201517] text-stone-300'
+                  }`}
+                >
+                  <ShieldCheck className="w-4 h-4" />
+                  <span>ส่วนแอดมิน (Admin Panel)</span>
+                </button>
               </div>
             )}
-          </button>
+
+            {/* Main Floating Trigger Button */}
+            <button
+              id="fab-trigger-menu"
+              onClick={() => setIsSwitcherOpen(!isSwitcherOpen)}
+              className="w-12 h-12 bg-gradient-to-br from-wine-800 to-wine-950 text-gold-300 hover:text-white rounded-full flex items-center justify-center shadow-2xl border border-wine-600/30 hover:scale-105 active:scale-95 transition-all cursor-pointer"
+              title="สลับหน้าจอทดสอบ"
+            >
+              {isSwitcherOpen ? (
+                <ChevronDown className="w-6 h-6" />
+              ) : (
+                <div className="relative">
+                  <Layers className="w-5 h-5 animate-pulse" />
+                  <span className="absolute -top-1.5 -right-1.5 w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+                </div>
+              )}
+            </button>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
