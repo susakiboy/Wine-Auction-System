@@ -259,16 +259,16 @@ export default function DashboardView({ wine, bids, onViewChange }: DashboardVie
                     {wine.status === 'ended' ? 'Winning Bidder' : 'Current Bidder'}
                   </span>
                   {wine.highestBidderId ? (
-                    <div className="flex items-center justify-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-[#1c1214] border border-gold-400/40 flex items-center justify-center font-mono text-gold-400 font-bold shadow-md">
+                    <div className="flex items-center justify-center gap-4">
+                      <div className="px-5 py-2.5 bg-gradient-to-r from-gold-400 via-amber-500 to-gold-400 border border-gold-300 rounded-xl flex items-center justify-center font-mono text-stone-950 text-xl font-black shadow-xl tracking-wider select-all">
                         {wine.highestBidderId}
                       </div>
                       <div className="text-left">
-                        <div className="text-sm font-semibold text-stone-200">
+                        <div className="text-base font-bold text-stone-100">
                           {wine.highestBidderName || 'ไม่ระบุชื่อ'}
                         </div>
-                        <div className="text-[10px] text-stone-400 font-mono">
-                          Bidder ID #{wine.highestBidderId}
+                        <div className="text-xs text-gold-400 font-mono font-semibold">
+                          ผู้เสนอราคาสูงสุดล่าสุด
                         </div>
                       </div>
                     </div>
@@ -326,12 +326,12 @@ export default function DashboardView({ wine, bids, onViewChange }: DashboardVie
                         }`}
                       >
                         <div className="flex items-center gap-3">
-                          <div className={`w-8 h-8 rounded-full flex items-center justify-center font-mono text-xs font-bold ${
+                          <div className={`px-3 py-1.5 rounded-lg flex items-center justify-center font-mono text-xs font-black tracking-wider shadow-md border ${
                             idx === 0 
-                              ? 'bg-gold-500 text-stone-900' 
-                              : 'bg-wine-900 text-stone-300'
+                              ? 'bg-gradient-to-r from-gold-400 to-amber-500 text-stone-950 border-gold-300' 
+                              : 'bg-[#1b1214] border-gold-400/20 text-gold-400'
                           }`}>
-                            {b.bidderId}
+                            ID: {b.bidderId}
                           </div>
                           <div className="text-left">
                             <span className="text-xs font-semibold block text-stone-200">

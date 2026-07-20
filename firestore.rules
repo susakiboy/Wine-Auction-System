@@ -16,7 +16,7 @@ service cloud.firestore {
     function isValidBidder(data) {
       return data.keys().hasAll(['id', 'firstName', 'lastName', 'phone', 'createdAt'])
         && data.keys().size() == 5
-        && data.id is string && data.id.size() >= 4 && data.id.size() <= 10
+        && data.id is string && data.id.size() >= 1 && data.id.size() <= 20
         && data.firstName is string && data.firstName.size() > 0 && data.firstName.size() <= 100
         && data.lastName is string && data.lastName.size() > 0 && data.lastName.size() <= 100
         && data.phone is string && data.phone.size() >= 9 && data.phone.size() <= 20
@@ -29,7 +29,7 @@ service cloud.firestore {
         && data.keys().size() == 10
         && data.id is string && data.id == 'active_wine'
         && data.name is string && data.name.size() > 0 && data.name.size() <= 200
-        && data.imageUrl is string && data.imageUrl.size() <= 1000
+        && data.imageUrl is string && data.imageUrl.size() <= 1000000
         && (data.startingPrice is int || data.startingPrice is float) && data.startingPrice >= 0
         && (data.currentBid is int || data.currentBid is float) && data.currentBid >= 0
         && (data.highestBidderId == null || (data.highestBidderId is string && data.highestBidderId.size() > 0))
@@ -57,7 +57,7 @@ service cloud.firestore {
         && data.id is string
         && data.wineId is string
         && data.name is string
-        && data.imageUrl is string
+        && data.imageUrl is string && data.imageUrl.size() <= 1000000
         && (data.startingPrice is int || data.startingPrice is float)
         && (data.finalPrice is int || data.finalPrice is float)
         && (data.winnerId == null || data.winnerId is string)

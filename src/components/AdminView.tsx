@@ -38,7 +38,8 @@ import {
   LogOut,
   Award,
   FileSpreadsheet,
-  Upload
+  Upload,
+  UserPlus
 } from 'lucide-react';
 
 interface AdminViewProps {
@@ -174,6 +175,65 @@ export default function AdminView({ wine, bids, onViewChange }: AdminViewProps) 
   const [editLastName, setEditLastName] = useState<string>('');
   const [editPhone, setEditPhone] = useState<string>('');
 
+  // Manual Bidder Registration State
+  const [manualId, setManualId] = useState<string>('');
+  const [manualFirstName, setManualFirstName] = useState<string>('');
+  const [manualLastName, setManualLastName] = useState<string>('');
+  const [manualPhone, setManualPhone] = useState<string>('');
+  const [isRegisteringManual, setIsRegisteringManual] = useState<boolean>(false);
+
+  const handleRegisterManualBidder = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanId = manualId.trim();
+    const cleanFirstName = manualFirstName.trim();
+    const cleanLastName = manualLastName.trim();
+    const cleanPhone = manualPhone.trim();
+
+    if (!cleanId || !cleanFirstName || !cleanLastName || !cleanPhone) {
+      triggerStatus('กรุณากรอกข้อมูลผู้ประมูลให้ครบถ้วนทุกช่อง (ป้ายผู้ประมูล ชื่อ นามสกุล และเบอร์โทร)', true);
+      return;
+    }
+
+    if (!/^[a-zA-Z0-9_-]+$/.test(cleanId)) {
+      triggerStatus('เลขที่ป้ายผู้ประมูลควรเป็นตัวเลขหรือตัวอักษรภาษาอังกฤษเท่านั้น', true);
+      return;
+    }
+
+    setIsRegisteringManual(true);
+    try {
+      const bidderRef = doc(db, 'bidders', cleanId);
+      const bidderSnap = await getDoc(bidderRef);
+
+      if (bidderSnap.exists()) {
+        triggerStatus(`ขออภัย! เลขที่ป้ายผู้ประมูลหมายเลข ${cleanId} นี้ได้รับการลงทะเบียนไว้แล้ว`, true);
+        setIsRegisteringManual(false);
+        return;
+      }
+
+      const newBidder: Bidder = {
+        id: cleanId,
+        firstName: cleanFirstName,
+        lastName: cleanLastName,
+        phone: cleanPhone,
+        createdAt: Date.now()
+      };
+
+      await setDoc(bidderRef, newBidder);
+      triggerStatus(`ลงทะเบียนผู้เข้าร่วมหมายเลข ${cleanId} สำเร็จ!`, false);
+      
+      // Reset manual fields
+      setManualId('');
+      setManualFirstName('');
+      setManualLastName('');
+      setManualPhone('');
+    } catch (err: any) {
+      console.error(err);
+      triggerStatus('เกิดข้อผิดพลาดในการลงทะเบียนผู้เข้าร่วม', true);
+    } finally {
+      setIsRegisteringManual(false);
+    }
+  };
+
   const startEditBidder = (bidder: Bidder) => {
     setEditingBidder(bidder);
     setEditFirstName(bidder.firstName);
@@ -243,6 +303,68 @@ export default function AdminView({ wine, bids, onViewChange }: AdminViewProps) 
     } catch (err: any) {
       console.error(err);
       triggerStatus('เกิดข้อผิดพลาดในการลบผู้ลงทะเบียน', true);
+    }
+  };
+
+  const handleResetBidders = async () => {
+    if (!window.confirm('🚨🚨🚨 คุณต้องการลบ "รายชื่อผู้ลงทะเบียนทั้งหมด" ใช่หรือไม่? ข้อมูลผู้ประมูลทั้งหมดจะหายไปและไม่สามารถกู้คืนได้!')) {
+      return;
+    }
+    if (!window.confirm('⚠️ ยืนยันอีกครั้ง: คุณมั่นใจจริงๆ หรือไม่ว่าต้องการรีเซ็ตผู้ลงทะเบียนทั้งหมด?')) {
+      return;
+    }
+
+    try {
+      const q = collection(db, 'bidders');
+      const querySnapshot = await getDocs(q);
+      const batch = writeBatch(db);
+      
+      querySnapshot.forEach((doc) => {
+        batch.delete(doc.ref);
+      });
+
+      await batch.commit();
+
+      // Also reset highest bidder on active wine
+      if (wine && (wine.highestBidderId || wine.highestBidderName)) {
+        const updatedWine: WineItem = {
+          ...wine,
+          highestBidderId: null,
+          highestBidderName: null,
+          updatedAt: Date.now()
+        };
+        await setDoc(doc(db, 'auctions', 'active_wine'), updatedWine);
+      }
+
+      triggerStatus('รีเซ็ตรายชื่อผู้ลงทะเบียนทั้งหมดสำเร็จแล้ว!', false);
+    } catch (err: any) {
+      console.error("Error resetting bidders: ", err);
+      alert("เกิดข้อผิดพลาดในการรีเซ็ตผู้ลงทะเบียน: " + err.message);
+    }
+  };
+
+  const handleResetCompletedLots = async () => {
+    if (!window.confirm('🚨🚨🚨 คุณต้องการลบ "ประวัติผลผู้ชนะการประมูลทั้งหมด" ใช่หรือไม่? ข้อมูลล็อตที่จบไปแล้วทั้งหมดจะถูกลบและไม่สามารถกู้คืนได้!')) {
+      return;
+    }
+    if (!window.confirm('⚠️ ยืนยันอีกครั้ง: คุณมั่นใจจริงๆ หรือไม่ว่าต้องการรีเซ็ตทำเนียบผู้ชนะทั้งหมด?')) {
+      return;
+    }
+
+    try {
+      const q = collection(db, 'completed_lots');
+      const querySnapshot = await getDocs(q);
+      const batch = writeBatch(db);
+
+      querySnapshot.forEach((doc) => {
+        batch.delete(doc.ref);
+      });
+
+      await batch.commit();
+      triggerStatus('รีเซ็ตทำเนียบผู้ชนะทั้งหมดสำเร็จแล้ว!', false);
+    } catch (err: any) {
+      console.error("Error resetting completed lots: ", err);
+      alert("เกิดข้อผิดพลาดในการรีเซ็ตผู้ชนะ: " + err.message);
     }
   };
 
@@ -684,8 +806,12 @@ export default function AdminView({ wine, bids, onViewChange }: AdminViewProps) 
                       <span>เสนอราคาสูงสุด: <strong className="text-gold-400 font-mono">฿{wine.currentBid.toLocaleString()}</strong></span>
                     </p>
                     {wine.highestBidderId ? (
-                      <p className="text-[10px] text-stone-500 mt-0.5">
-                        ผู้เสนอราคาสูงสุด: ID {wine.highestBidderId} ({wine.highestBidderName})
+                      <p className="text-xs text-stone-300 mt-1 flex items-center gap-1.5 flex-wrap">
+                        <span>ผู้เสนอราคาสูงสุด:</span>
+                        <span className="bg-gold-400/20 text-gold-300 font-mono font-black border border-gold-400/30 px-2 py-0.5 rounded text-xs">
+                          ID: {wine.highestBidderId}
+                        </span>
+                        <span className="font-semibold text-white">({wine.highestBidderName})</span>
                       </p>
                     ) : (
                       <p className="text-[10px] text-stone-500 mt-0.5">ยังไม่มีผู้เสนอราคา</p>
@@ -829,13 +955,15 @@ export default function AdminView({ wine, bids, onViewChange }: AdminViewProps) 
                   </div>
 
                   {/* Right: Input Methods */}
-                  <div className="md:col-span-8 space-y-4">
-                    {/* Method 1: Upload File */}
+                  <div className="md:col-span-8 space-y-3">
                     <div>
-                      <span className="block text-[10px] font-mono text-stone-500 uppercase tracking-wider mb-1.5">วิธีที่ 1: เลือกรูปภาพจากเครื่องคอมพิวเตอร์ของคุณ</span>
-                      <label className="flex items-center gap-2 px-4 py-2.5 bg-wine-950/40 hover:bg-wine-900/60 border border-gold-400/20 hover:border-gold-400/40 text-gold-200 hover:text-white rounded-xl text-xs font-mono font-medium tracking-wide transition-all cursor-pointer shadow-md justify-center w-full">
-                        <Upload className="w-4 h-4 text-gold-400" />
-                        <span>เลือกและอัปโหลดไฟล์จากคอมพิวเตอร์</span>
+                      <span className="block text-[10px] font-mono text-stone-400 uppercase tracking-wider mb-2">เลือกรูปภาพจากเครื่องคอมพิวเตอร์ของคุณ</span>
+                      <label className="flex flex-col items-center justify-center gap-3 px-6 py-6 bg-wine-950/20 hover:bg-wine-900/40 border border-dashed border-gold-400/20 hover:border-gold-400/40 text-gold-200 hover:text-white rounded-2xl text-xs font-mono font-medium tracking-wide transition-all cursor-pointer shadow-md w-full">
+                        <Upload className="w-6 h-6 text-gold-400 animate-pulse" />
+                        <div className="text-center space-y-1">
+                          <span className="block text-stone-200 font-sans font-semibold">คลิกเพื่อเลือกไฟล์รูปภาพ</span>
+                          <span className="block text-[10px] text-stone-500 font-sans">รองรับไฟล์รูปภาพ PNG, JPG, JPEG (บีบอัดไฟล์โดยอัตโนมัติ)</span>
+                        </div>
                         <input
                           type="file"
                           id="admin-file-upload"
@@ -844,28 +972,6 @@ export default function AdminView({ wine, bids, onViewChange }: AdminViewProps) 
                           className="hidden"
                         />
                       </label>
-                    </div>
-
-                    <div className="relative flex py-1 items-center">
-                      <div className="flex-grow border-t border-gold-400/5"></div>
-                      <span className="flex-shrink mx-4 text-[9px] font-mono text-stone-600 uppercase">หรือ (OR)</span>
-                      <div className="flex-grow border-t border-gold-400/5"></div>
-                    </div>
-
-                    {/* Method 2: Image URL */}
-                    <div>
-                      <span className="block text-[10px] font-mono text-stone-500 uppercase tracking-wider mb-1.5">วิธีที่ 2: ใส่ลิงก์รูปภาพเว็บ (Direct URL)</span>
-                      <div className="relative">
-                        <Image className="w-4 h-4 text-stone-500 absolute left-3 top-3.5" />
-                        <input
-                          type="text"
-                          id="admin-image-url"
-                          placeholder="https://images.unsplash.com/photo-..."
-                          value={imageUrl}
-                          onChange={(e) => setImageUrl(e.target.value)}
-                          className="w-full bg-[#141414] border border-gold-400/10 rounded-xl py-2.5 pl-10 pr-4 text-xs text-stone-200 focus:outline-none focus:border-gold-400 transition-colors placeholder:text-stone-600"
-                        />
-                      </div>
                     </div>
                   </div>
                 </div>
@@ -965,7 +1071,91 @@ export default function AdminView({ wine, bids, onViewChange }: AdminViewProps) 
               <Users className="w-5 h-5 text-gold-400" />
               <h2 className="text-lg font-serif font-medium text-stone-100">ผู้ลงทะเบียนเข้าร่วม ({bidders.length})</h2>
             </div>
+            {bidders.length > 0 && (
+              <button
+                type="button"
+                onClick={handleResetBidders}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-950/40 hover:bg-rose-900/40 border border-rose-500/20 hover:border-rose-500/40 text-rose-400 hover:text-rose-300 rounded-xl text-[10px] font-mono font-bold uppercase tracking-wider transition-all cursor-pointer"
+                title="รีเซ็ตผู้ลงทะเบียนทั้งหมด"
+              >
+                <RotateCcw className="w-3 h-3 text-rose-400" />
+                <span>รีเซ็ตผู้ลงทะเบียน</span>
+              </button>
+            )}
           </div>
+
+          {/* Manual Bidder Registration Form */}
+          <form onSubmit={handleRegisterManualBidder} className="mb-6 p-4 bg-wine-950/15 border border-gold-400/10 rounded-2xl space-y-4">
+            <div className="flex items-center gap-2 border-b border-gold-400/5 pb-2">
+              <UserPlus className="w-4 h-4 text-gold-400" />
+              <span className="text-xs font-mono font-bold uppercase tracking-wider text-gold-400">ลงทะเบียนผู้ประมูลด้วยตนเอง</span>
+            </div>
+            
+            <div className="grid grid-cols-12 gap-3">
+              {/* Paddle ID / Bidder ID */}
+              <div className="col-span-4">
+                <label className="block text-[9px] font-mono text-stone-400 uppercase tracking-wider mb-1">เลขป้ายผู้ประมูล</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="เช่น 1024"
+                  value={manualId}
+                  onChange={(e) => setManualId(e.target.value)}
+                  className="w-full bg-[#141414] border border-gold-400/10 rounded-xl py-1.5 px-3 text-xs text-stone-200 focus:outline-none focus:border-gold-400 transition-colors font-mono placeholder:text-stone-700"
+                />
+              </div>
+              
+              {/* Phone */}
+              <div className="col-span-8">
+                <label className="block text-[9px] font-mono text-stone-400 uppercase tracking-wider mb-1">เบอร์โทรศัพท์</label>
+                <input
+                  type="tel"
+                  required
+                  placeholder="08xxxxxxxx"
+                  value={manualPhone}
+                  onChange={(e) => setManualPhone(e.target.value)}
+                  className="w-full bg-[#141414] border border-gold-400/10 rounded-xl py-1.5 px-3 text-xs text-stone-200 focus:outline-none focus:border-gold-400 transition-colors font-mono placeholder:text-stone-700"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              {/* First name */}
+              <div>
+                <label className="block text-[9px] font-mono text-stone-400 uppercase tracking-wider mb-1">ชื่อจริง</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="เช่น สมชาย"
+                  value={manualFirstName}
+                  onChange={(e) => setManualFirstName(e.target.value)}
+                  className="w-full bg-[#141414] border border-gold-400/10 rounded-xl py-1.5 px-3 text-xs text-stone-200 focus:outline-none focus:border-gold-400 transition-colors placeholder:text-stone-700"
+                />
+              </div>
+
+              {/* Last name */}
+              <div>
+                <label className="block text-[9px] font-mono text-stone-400 uppercase tracking-wider mb-1">นามสกุล</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="เช่น รักดี"
+                  value={manualLastName}
+                  onChange={(e) => setManualLastName(e.target.value)}
+                  className="w-full bg-[#141414] border border-gold-400/10 rounded-xl py-1.5 px-3 text-xs text-stone-200 focus:outline-none focus:border-gold-400 transition-colors placeholder:text-stone-700"
+                />
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={isRegisteringManual}
+              className="w-full py-2 px-4 bg-gradient-to-r from-wine-900 to-wine-950 hover:from-wine-800 hover:to-wine-900 disabled:opacity-50 border border-gold-400/20 hover:border-gold-400/40 text-gold-200 hover:text-white rounded-xl text-xs font-mono font-bold uppercase tracking-wider transition-all cursor-pointer shadow-md flex items-center justify-center gap-1.5"
+            >
+              <UserPlus className="w-3.5 h-3.5 text-gold-400" />
+              <span>{isRegisteringManual ? 'กำลังบันทึกข้อมูล...' : 'ลงทะเบียนผู้เข้าร่วม (Register)'}</span>
+            </button>
+          </form>
 
           <div className="flex-grow overflow-y-auto space-y-2.5 max-h-[420px] pr-1">
             {bidders.length === 0 ? (
@@ -986,8 +1176,8 @@ export default function AdminView({ wine, bids, onViewChange }: AdminViewProps) 
                     className="p-3 bg-[#141414]/60 hover:bg-[#1f1f1f]/60 border border-gold-400/5 rounded-xl flex items-center justify-between transition-colors"
                   >
                     <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-full bg-[#1b1214] border border-gold-400/20 flex items-center justify-center font-mono text-xs font-bold text-gold-400">
-                        {b.id}
+                      <div className="px-3 py-1.5 bg-gradient-to-b from-[#1b1214] to-black border border-gold-400/30 rounded-xl flex items-center justify-center font-mono text-sm font-black text-gold-400 shadow-md min-w-[54px]">
+                        ID: {b.id}
                       </div>
                       <div className="text-left">
                         <div className="text-sm font-semibold text-stone-200">
@@ -1074,14 +1264,27 @@ export default function AdminView({ wine, bids, onViewChange }: AdminViewProps) 
                 <p className="text-xs text-stone-400 mt-0.5">รวมรายการไวน์พรีเมียมทั้งหมดที่ปิดการเคาะราคาอย่างเป็นทางการแล้ว</p>
               </div>
 
-              <button
-                type="button"
-                onClick={exportToCSV}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#112419] hover:bg-[#183525] text-emerald-400 hover:text-emerald-300 border border-emerald-500/20 shadow-lg text-xs font-mono uppercase tracking-wider transition-all cursor-pointer"
-              >
-                <FileSpreadsheet className="w-4 h-4" />
-                <span>ส่งออกไฟล์รายงานผู้ชนะ (.CSV)</span>
-              </button>
+              <div className="flex flex-wrap gap-3">
+                {completedLots.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleResetCompletedLots}
+                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-rose-950/20 hover:bg-rose-900/30 text-rose-400 hover:text-rose-300 border border-rose-500/20 hover:border-rose-500/40 shadow-lg text-xs font-mono uppercase tracking-wider transition-all cursor-pointer"
+                  >
+                    <RotateCcw className="w-4 h-4" />
+                    <span>รีเซ็ตผู้ชนะทั้งหมด</span>
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={exportToCSV}
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#112419] hover:bg-[#183525] text-emerald-400 hover:text-emerald-300 border border-emerald-500/20 shadow-lg text-xs font-mono uppercase tracking-wider transition-all cursor-pointer"
+                >
+                  <FileSpreadsheet className="w-4 h-4" />
+                  <span>ส่งออกไฟล์รายงานผู้ชนะ (.CSV)</span>
+                </button>
+              </div>
             </div>
 
             {completedLots.length === 0 ? (
@@ -1145,8 +1348,8 @@ export default function AdminView({ wine, bids, onViewChange }: AdminViewProps) 
                       {/* Winner details */}
                       <div className="flex items-center justify-between lg:justify-end gap-6 w-full lg:w-auto border-t lg:border-t-0 border-white/5 pt-4 lg:pt-0">
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-full bg-[#1c1214] border border-gold-400/30 flex items-center justify-center font-mono text-gold-400 text-xs font-bold">
-                            {lot.winnerId || '-'}
+                          <div className="px-3 py-2 bg-gradient-to-r from-gold-400 via-amber-500 to-gold-400 border border-gold-300 rounded-xl flex items-center justify-center font-mono text-stone-950 text-sm font-black shadow-lg min-w-[54px]">
+                            ID: {lot.winnerId || '-'}
                           </div>
                           <div className="text-left">
                             <span className="text-[9px] font-mono text-stone-400 uppercase tracking-wider block">Winner info</span>

@@ -362,13 +362,13 @@ export default function BidderView({ wine, bids, onViewChange }: BidderViewProps
             
             {/* Header Badge */}
             <div className="flex items-center justify-between border-b border-gold-400/10 pb-3.5 mb-4">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-full bg-gold-400/10 border border-gold-400/30 flex items-center justify-center font-mono text-xs font-bold text-gold-400">
+              <div className="flex items-center gap-3">
+                <div className="px-3.5 py-1.5 bg-gradient-to-r from-gold-400 via-amber-500 to-gold-400 text-stone-950 font-mono text-sm font-black rounded-xl border border-gold-300 shadow-md shrink-0">
                   {currentUser.id}
                 </div>
                 <div>
                   <h3 className="text-xs font-semibold text-stone-200">{currentUser.firstName} {currentUser.lastName}</h3>
-                  <p className="text-[10px] text-stone-500 font-mono">Bidder ID: #{currentUser.id}</p>
+                  <p className="text-[10px] text-gold-400 font-mono font-bold">หมายเลขผู้ประมูล: #{currentUser.id}</p>
                 </div>
               </div>
               <span className="text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 rounded-full px-2.5 py-0.5 font-mono">
