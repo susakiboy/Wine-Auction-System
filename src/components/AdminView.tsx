@@ -36,7 +36,9 @@ import {
   X,
   Lock,
   LogOut,
-  Award
+  Award,
+  FileSpreadsheet,
+  Upload
 } from 'lucide-react';
 
 interface AdminViewProps {
@@ -109,7 +111,60 @@ export default function AdminView({ wine, bids, onViewChange }: AdminViewProps) 
   const [step3, setStep3] = useState<number>(5000);
   const [step4, setStep4] = useState<number>(10000);
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 15 * 1024 * 1024) {
+      alert("ไฟล์รูปภาพมีขนาดใหญ่เกินไป (กรุณาเลือกไฟล์รูปภาพขนาดไม่เกิน 15MB)");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new window.Image();
+      img.onload = () => {
+        // Safe resizing limit to ensure firestore maximum payload limit is never exceeded
+        const canvas = window.document.createElement('canvas');
+        const MAX_WIDTH = 700;
+        const MAX_HEIGHT = 700;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > MAX_WIDTH) {
+            height *= MAX_WIDTH / width;
+            width = MAX_WIDTH;
+          }
+        } else {
+          if (height > MAX_HEIGHT) {
+            width *= MAX_HEIGHT / height;
+            height = MAX_HEIGHT;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          // Compress to jpeg with 0.70 quality to be extremely lightweight (usually 25-50KB)
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.70);
+          setImageUrl(dataUrl);
+          triggerStatus('อัปโหลดและบีบอัดรูปภาพสำเร็จ!', false);
+        } else {
+          // Fallback
+          setImageUrl(event.target?.result as string);
+          triggerStatus('โหลดรูปภาพสำเร็จ!', false);
+        }
+      };
+      img.src = event.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  };
+
   const [bidders, setBidders] = useState<Bidder[]>([]);
+  const [completedLots, setCompletedLots] = useState<CompletedLot[]>([]);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [statusMessage, setStatusMessage] = useState<{ text: string; error: boolean } | null>(null);
 
@@ -275,6 +330,66 @@ export default function AdminView({ wine, bids, onViewChange }: AdminViewProps) 
     });
     return () => unsubscribe();
   }, []);
+
+  // Real-time Firestore Sync for completed lots history in admin
+  useEffect(() => {
+    const q = collection(db, 'completed_lots');
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const records: CompletedLot[] = [];
+      snapshot.forEach((doc) => {
+        records.push({ ...doc.data() } as CompletedLot);
+      });
+      // Sort by endedAt descending to show latest first
+      records.sort((a, b) => b.endedAt - a.endedAt);
+      setCompletedLots(records);
+    }, (error) => {
+      console.error("Firestore error listening to completed_lots: ", error);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const handleDeleteCompletedLot = async (lotId: string) => {
+    if (!window.confirm('⚠️ คุณแน่ใจหรือไม่ที่จะลบข้อมูลรายงานผู้ชนะของล็อตนี้? การกระทำนี้ไม่สามารถย้อนคืนได้')) return;
+    try {
+      await deleteDoc(doc(db, 'completed_lots', lotId));
+      triggerStatus('ลบรายงานผลสำเร็จลุล่วง', false);
+    } catch (err: any) {
+      console.error("Error deleting completed lot: ", err);
+      alert("เกิดข้อผิดพลาดในการลบ: " + err.message);
+    }
+  };
+
+  const exportToCSV = () => {
+    if (completedLots.length === 0) {
+      alert('ไม่มีข้อมูลผู้ชนะการประมูลที่สามารถส่งออกได้');
+      return;
+    }
+
+    // Define CSV Headers with UTF-8 BOM so MS Excel displays Thai names correctly
+    const headers = ['Lot ID', 'Wine Name', 'Starting Price (THB)', 'Winning Price (THB)', 'Winner ID', 'Winner Name', 'Phone Number', 'Completed At'];
+    
+    const rows = completedLots.map(lot => [
+      lot.id,
+      `"${lot.name.replace(/"/g, '""')}"`,
+      lot.startingPrice,
+      lot.finalPrice,
+      lot.winnerId || '-',
+      `"${(lot.winnerName || '-').replace(/"/g, '""')}"`,
+      `"${(lot.winnerPhone || '-').replace(/"/g, '""')}"`,
+      `"${new Date(lot.endedAt).toLocaleString('th-TH')}"`
+    ]);
+
+    const csvContent = "\uFEFF" + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
+    
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `wine_auction_winners_${Date.now()}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   const triggerStatus = (text: string, error: boolean = false) => {
     setStatusMessage({ text, error });
@@ -660,7 +775,7 @@ export default function AdminView({ wine, bids, onViewChange }: AdminViewProps) 
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-5">
               {/* Starting Price */}
               <div>
                 <label className="block text-xs font-mono uppercase tracking-wider text-stone-400 mb-1.5">ราคากลางตั้งต้น (฿ Starting Price)</label>
@@ -679,20 +794,80 @@ export default function AdminView({ wine, bids, onViewChange }: AdminViewProps) 
                 </div>
               </div>
 
-              {/* Image URL */}
-              <div>
-                <label className="block text-xs font-mono uppercase tracking-wider text-stone-400 mb-1.5">รูปภาพลิงก์สินค้า (Wine Image URL)</label>
-                <div className="relative">
-                  <Image className="w-4 h-4 text-stone-500 absolute left-3 top-3.5" />
-                  <input
-                    type="url"
-                    id="admin-image-url"
-                    required
-                    placeholder="https://images.unsplash.com/..."
-                    value={imageUrl}
-                    onChange={(e) => setImageUrl(e.target.value)}
-                    className="w-full bg-[#141414] border border-gold-400/10 rounded-xl py-2.5 pl-10 pr-4 text-sm text-stone-200 focus:outline-none focus:border-gold-400 transition-colors"
-                  />
+              {/* Image Input Selection */}
+              <div className="bg-[#0c0c0c] border border-gold-400/10 rounded-2xl p-5 space-y-4">
+                <span className="block text-xs font-mono uppercase tracking-wider text-stone-400">รูปภาพสินค้าประจำล็อต (Lot Product Image)</span>
+                
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-5 items-center">
+                  {/* Left: Preview */}
+                  <div className="md:col-span-4 flex flex-col items-center justify-center bg-[#141414] rounded-xl border border-gold-400/5 p-2 aspect-square relative group overflow-hidden max-w-[180px] mx-auto md:mx-0 w-full">
+                    {imageUrl ? (
+                      <>
+                        <img 
+                          src={imageUrl} 
+                          alt="Preview" 
+                          className="w-full h-full object-cover rounded-lg"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1510812431401-41d2bd2722f3?auto=format&fit=crop&q=80&w=805";
+                          }}
+                        />
+                        <button
+                          type="button"
+                          id="btn-admin-clear-image"
+                          onClick={() => setImageUrl('')}
+                          className="absolute inset-0 bg-black/75 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-rose-400 text-xs font-mono font-bold cursor-pointer"
+                        >
+                          ลบรูปภาพ (Clear)
+                        </button>
+                      </>
+                    ) : (
+                      <div className="text-stone-600 flex flex-col items-center justify-center gap-1.5 p-4 text-center">
+                        <Image className="w-8 h-8 opacity-40 text-gold-400" />
+                        <span className="text-[10px] font-sans">ไม่มีพรีวิว (No Preview)</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Right: Input Methods */}
+                  <div className="md:col-span-8 space-y-4">
+                    {/* Method 1: Upload File */}
+                    <div>
+                      <span className="block text-[10px] font-mono text-stone-500 uppercase tracking-wider mb-1.5">วิธีที่ 1: เลือกรูปภาพจากเครื่องคอมพิวเตอร์ของคุณ</span>
+                      <label className="flex items-center gap-2 px-4 py-2.5 bg-wine-950/40 hover:bg-wine-900/60 border border-gold-400/20 hover:border-gold-400/40 text-gold-200 hover:text-white rounded-xl text-xs font-mono font-medium tracking-wide transition-all cursor-pointer shadow-md justify-center w-full">
+                        <Upload className="w-4 h-4 text-gold-400" />
+                        <span>เลือกและอัปโหลดไฟล์จากคอมพิวเตอร์</span>
+                        <input
+                          type="file"
+                          id="admin-file-upload"
+                          accept="image/*"
+                          onChange={handleFileChange}
+                          className="hidden"
+                        />
+                      </label>
+                    </div>
+
+                    <div className="relative flex py-1 items-center">
+                      <div className="flex-grow border-t border-gold-400/5"></div>
+                      <span className="flex-shrink mx-4 text-[9px] font-mono text-stone-600 uppercase">หรือ (OR)</span>
+                      <div className="flex-grow border-t border-gold-400/5"></div>
+                    </div>
+
+                    {/* Method 2: Image URL */}
+                    <div>
+                      <span className="block text-[10px] font-mono text-stone-500 uppercase tracking-wider mb-1.5">วิธีที่ 2: ใส่ลิงก์รูปภาพเว็บ (Direct URL)</span>
+                      <div className="relative">
+                        <Image className="w-4 h-4 text-stone-500 absolute left-3 top-3.5" />
+                        <input
+                          type="text"
+                          id="admin-image-url"
+                          placeholder="https://images.unsplash.com/photo-..."
+                          value={imageUrl}
+                          onChange={(e) => setImageUrl(e.target.value)}
+                          className="w-full bg-[#141414] border border-gold-400/10 rounded-xl py-2.5 pl-10 pr-4 text-xs text-stone-200 focus:outline-none focus:border-gold-400 transition-colors placeholder:text-stone-600"
+                        />
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -857,6 +1032,142 @@ export default function AdminView({ wine, bids, onViewChange }: AdminViewProps) 
                   </div>
                 );
               })
+            )}
+          </div>
+        </div>
+
+        {/* Full Width: Winners Dashboard / Completed Lots History */}
+        <div className="lg:col-span-12 space-y-6 mt-8 border-t border-gold-400/10 pt-8">
+          <div className="flex items-center gap-2 border-b border-gold-400/10 pb-4">
+            <Award className="w-5 h-5 text-gold-400" />
+            <h2 className="text-lg font-serif font-medium text-stone-100">🏆 ทำเนียบผู้ชนะแต่ละล็อต (Winners History)</h2>
+          </div>
+
+          {/* Stats Summary Panel */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="bg-[#0a0a0a] border border-gold-400/10 rounded-2xl p-6 shadow-xl relative overflow-hidden">
+              <div className="absolute top-0 left-0 h-full w-1 bg-wine-700" />
+              <span className="text-[10px] font-mono uppercase tracking-wider text-stone-400 block mb-1">ล็อตประมูลเสร็จสิ้นทั้งหมด</span>
+              <span className="text-3xl font-serif font-bold text-stone-100">{completedLots.length} ล็อต</span>
+            </div>
+            <div className="bg-[#0a0a0a] border border-gold-400/10 rounded-2xl p-6 shadow-xl relative overflow-hidden">
+              <div className="absolute top-0 left-0 h-full w-1 bg-gold-500" />
+              <span className="text-[10px] font-mono uppercase tracking-wider text-stone-400 block mb-1">ยอดเงินระดมทุนประมูลสะสม</span>
+              <span className="text-3xl font-serif font-bold text-gold-400">
+                ฿{completedLots.reduce((acc, curr) => acc + curr.finalPrice, 0).toLocaleString('th-TH')}
+              </span>
+            </div>
+            <div className="bg-[#0a0a0a] border border-gold-400/10 rounded-2xl p-6 shadow-xl relative overflow-hidden">
+              <div className="absolute top-0 left-0 h-full w-1 bg-emerald-700" />
+              <span className="text-[10px] font-mono uppercase tracking-wider text-stone-400 block mb-1">จำนวนผู้ประมูลที่ชนะรางวัล</span>
+              <span className="text-3xl font-serif font-bold text-stone-100 font-mono">
+                {Array.from(new Set(completedLots.map(l => l.winnerId).filter(id => id && id !== 'ไม่มีผู้เสนอราคา'))).length} ท่าน
+              </span>
+            </div>
+          </div>
+
+          {/* Main historical list */}
+          <div className="bg-[#0a0a0a] border border-gold-400/20 rounded-3xl p-6 shadow-2xl space-y-6">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-gold-400/10 pb-4">
+              <div className="text-left">
+                <h3 className="text-md font-serif font-medium text-stone-200">ประวัติผลผู้ชนะการประมูลไวน์ในแต่ละล็อต</h3>
+                <p className="text-xs text-stone-400 mt-0.5">รวมรายการไวน์พรีเมียมทั้งหมดที่ปิดการเคาะราคาอย่างเป็นทางการแล้ว</p>
+              </div>
+
+              <button
+                type="button"
+                onClick={exportToCSV}
+                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#112419] hover:bg-[#183525] text-emerald-400 hover:text-emerald-300 border border-emerald-500/20 shadow-lg text-xs font-mono uppercase tracking-wider transition-all cursor-pointer"
+              >
+                <FileSpreadsheet className="w-4 h-4" />
+                <span>ส่งออกไฟล์รายงานผู้ชนะ (.CSV)</span>
+              </button>
+            </div>
+
+            {completedLots.length === 0 ? (
+              <div className="py-20 text-center flex flex-col items-center justify-center text-stone-500">
+                <Award className="w-16 h-16 opacity-20 mb-4 text-gold-400 animate-pulse" />
+                <p className="text-sm">ยังไม่มีรายการล็อตประมูลที่บันทึกผลเสร็จสิ้นในระบบขณะนี้</p>
+                <p className="text-xs text-stone-500 mt-1">เมื่อคุณกด "ปิดประมูล" ในส่วนแผงควบคุมด้านบน ข้อมูลล็อตพร้อมผู้ชนะจะบันทึกมาที่นี่ทันที</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {completedLots.map((lot) => {
+                  const priceDiff = lot.finalPrice - lot.startingPrice;
+                  const percentInc = lot.startingPrice > 0 ? ((priceDiff / lot.startingPrice) * 100).toFixed(0) : '0';
+                  const defaultWineImg = "https://images.unsplash.com/photo-1510812431401-41d2bd2722f3?auto=format&fit=crop&q=80&w=800";
+
+                  return (
+                    <div 
+                      key={lot.id} 
+                      className="bg-[#121212]/50 border border-gold-400/5 hover:border-gold-400/15 rounded-2xl p-5 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 transition-all"
+                    >
+                      <div className="flex items-center gap-4 w-full lg:w-auto">
+                        <div className="w-16 h-16 rounded-xl bg-[#1f1f1f] border border-gold-400/10 overflow-hidden shrink-0 flex items-center justify-center">
+                          <img 
+                            src={lot.imageUrl || defaultWineImg} 
+                            alt={lot.name} 
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).src = defaultWineImg;
+                            }}
+                          />
+                        </div>
+                        <div className="text-left">
+                          <span className="text-[9px] font-mono text-gold-400 bg-gold-400/5 border border-gold-400/10 px-2 py-0.5 rounded-md uppercase tracking-wider">
+                            LOT ID: {lot.id.substring(4)}
+                          </span>
+                          <h4 className="text-base font-serif font-medium text-stone-100 mt-1">{lot.name}</h4>
+                          <p className="text-[10px] text-stone-400 font-mono mt-1">
+                            เวลาปิดล็อต: {new Date(lot.endedAt).toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'medium' })}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Financial stats */}
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-6 bg-[#161616]/40 px-5 py-3.5 rounded-xl border border-white/5 w-full lg:w-auto lg:min-w-[400px] text-left">
+                        <div>
+                          <span className="text-[9px] font-mono text-stone-400 uppercase tracking-wider block">Starting</span>
+                          <span className="text-sm font-semibold text-stone-300">฿{lot.startingPrice.toLocaleString('th-TH')}</span>
+                        </div>
+                        <div>
+                          <span className="text-[9px] font-mono text-gold-400 uppercase tracking-wider block">Winning Price</span>
+                          <span className="text-sm font-semibold text-gold-300">฿{lot.finalPrice.toLocaleString('th-TH')}</span>
+                        </div>
+                        <div className="col-span-2 sm:col-span-1">
+                          <span className="text-[9px] font-mono text-emerald-400 uppercase tracking-wider block">Increase</span>
+                          <span className="text-sm font-bold text-emerald-400">
+                            +{percentInc}% (+฿{priceDiff.toLocaleString('th-TH')})
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Winner details */}
+                      <div className="flex items-center justify-between lg:justify-end gap-6 w-full lg:w-auto border-t lg:border-t-0 border-white/5 pt-4 lg:pt-0">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-full bg-[#1c1214] border border-gold-400/30 flex items-center justify-center font-mono text-gold-400 text-xs font-bold">
+                            {lot.winnerId || '-'}
+                          </div>
+                          <div className="text-left">
+                            <span className="text-[9px] font-mono text-stone-400 uppercase tracking-wider block">Winner info</span>
+                            <span className="text-xs font-bold text-stone-200 block">{lot.winnerName}</span>
+                            <span className="text-[10px] text-stone-400 font-mono">{lot.winnerPhone}</span>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteCompletedLot(lot.id)}
+                          className="p-2 text-stone-500 hover:text-rose-400 hover:bg-rose-400/10 rounded-xl transition-colors cursor-pointer"
+                          title="ลบรายงานผลล็อตนี้"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             )}
           </div>
         </div>
