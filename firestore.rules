@@ -26,7 +26,7 @@ service cloud.firestore {
     // Wine item validator
     function isValidWine(data) {
       return data.keys().hasAll(['id', 'name', 'imageUrl', 'startingPrice', 'currentBid', 'highestBidderId', 'highestBidderName', 'bidIncrementSteps', 'status', 'updatedAt'])
-        && data.keys().size() == 10
+        && data.keys().size() >= 10 && data.keys().size() <= 15
         && data.id is string && data.id == 'active_wine'
         && data.name is string && data.name.size() > 0 && data.name.size() <= 200
         && data.imageUrl is string && data.imageUrl.size() <= 1000000
@@ -36,7 +36,12 @@ service cloud.firestore {
         && (data.highestBidderName == null || (data.highestBidderName is string && data.highestBidderName.size() > 0))
         && data.bidIncrementSteps is list
         && data.status is string && (data.status == 'active' || data.status == 'ended' || data.status == 'completed')
-        && (data.updatedAt is int || data.updatedAt is float);
+        && (data.updatedAt is int || data.updatedAt is float)
+        && (!data.keys().hasAny(['timerDuration']) || (data.timerDuration is int && data.timerDuration >= 0))
+        && (!data.keys().hasAny(['timerEndsAt']) || (data.timerEndsAt == null || data.timerEndsAt is int))
+        && (!data.keys().hasAny(['timerStatus']) || (data.timerStatus is string && (data.timerStatus == 'idle' || data.timerStatus == 'running' || data.timerStatus == 'paused' || data.timerStatus == 'ended')))
+        && (!data.keys().hasAny(['headerTitle']) || (data.headerTitle is string && data.headerTitle.size() <= 500))
+        && (!data.keys().hasAny(['logoUrl']) || (data.logoUrl is string && data.logoUrl.size() <= 2000000));
     }
 
     // Bid record validator

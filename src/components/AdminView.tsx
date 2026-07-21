@@ -15,7 +15,10 @@ import {
   writeBatch,
   onSnapshot,
   deleteDoc,
-  updateDoc
+  updateDoc,
+  query,
+  where,
+  orderBy
 } from '../lib/firebase';
 import { 
   ShieldCheck, 
@@ -39,7 +42,11 @@ import {
   Award,
   FileSpreadsheet,
   Upload,
-  UserPlus
+  UserPlus,
+  Play,
+  Pause,
+  Clock,
+  Timer
 } from 'lucide-react';
 
 interface AdminViewProps {
@@ -111,6 +118,8 @@ export default function AdminView({ wine, bids, onViewChange }: AdminViewProps) 
   const [step2, setStep2] = useState<number>(1000);
   const [step3, setStep3] = useState<number>(5000);
   const [step4, setStep4] = useState<number>(10000);
+  const [headerTitle, setHeaderTitle] = useState<string>('VINTAGE RESERVE');
+  const [logoUrl, setLogoUrl] = useState<string>('');
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -368,6 +377,80 @@ export default function AdminView({ wine, bids, onViewChange }: AdminViewProps) 
     }
   };
 
+  const handleResetBidderBids = async (bidderId: string, bidderName: string) => {
+    if (!wine) {
+      triggerStatus('ไม่มีรอบประมูลให้รีเซ็ต', true);
+      return;
+    }
+
+    if (!window.confirm(`🚨 คุณมั่นใจที่จะรีเซ็ตการเสนอราคาทั้งหมดของ "${bidderName}" (ID: ${bidderId}) หรือไม่?\nประวัติการเคาะสู้ราคาของท่านนี้ทั้งหมดจะถูกลบ และระบบจะคำนวณราคาสูงสุดของล็อตนี้ใหม่ให้อัตโนมัติ`)) {
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      // 1. Get all bids of this specific bidder in the 'bids' collection
+      const bidsRef = collection(db, 'bids');
+      const q = query(bidsRef, where('bidderId', '==', bidderId));
+      const querySnapshot = await getDocs(q);
+
+      // 2. Delete each of those bids using a Firestore batch
+      const batch = writeBatch(db);
+      querySnapshot.forEach((docSnap) => {
+        batch.delete(docSnap.ref);
+      });
+      await batch.commit();
+
+      // 3. Query all remaining bids from Firestore (after the deletion is committed)
+      const remainingBidsQuery = query(bidsRef, orderBy('timestamp', 'desc'));
+      const remainingBidsSnap = await getDocs(remainingBidsQuery);
+      
+      const remainingBids: BidRecord[] = [];
+      remainingBidsSnap.forEach((docSnap) => {
+        remainingBids.push(docSnap.data() as BidRecord);
+      });
+
+      // 4. Update active_wine currentBid & highest bidder info based on the remaining bids
+      const activeWineRef = doc(db, 'auctions', 'active_wine');
+      const wineSnap = await getDoc(activeWineRef);
+      if (wineSnap.exists()) {
+        const currentActiveWine = wineSnap.data() as WineItem;
+        
+        if (remainingBids.length > 0) {
+          // Find the maximum bid amount among remaining bids (the highest bid is usually the max amount)
+          let highestBid = remainingBids[0];
+          for (const rb of remainingBids) {
+            if (rb.amount > highestBid.amount) {
+              highestBid = rb;
+            }
+          }
+
+          await updateDoc(activeWineRef, {
+            currentBid: highestBid.amount,
+            highestBidderId: highestBid.bidderId,
+            highestBidderName: highestBid.bidderName,
+            updatedAt: Date.now()
+          });
+        } else {
+          // No bids left at all, revert currentBid to startingPrice and clear winner fields
+          await updateDoc(activeWineRef, {
+            currentBid: currentActiveWine.startingPrice,
+            highestBidderId: null,
+            highestBidderName: null,
+            updatedAt: Date.now()
+          });
+        }
+      }
+
+      triggerStatus(`รีเซ็ตข้อมูลการเคาะเสนอราคาของ ${bidderName} เรียบร้อยแล้ว!`, false);
+    } catch (err: any) {
+      console.error("Error resetting bidder bids: ", err);
+      triggerStatus('เกิดข้อผิดพลาดในการรีเซ็ตการเสนอราคารายบุคคล: ' + err.message, true);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const [isEnding, setIsEnding] = useState<boolean>(false);
 
   const handleEndAuction = async () => {
@@ -424,6 +507,122 @@ export default function AdminView({ wine, bids, onViewChange }: AdminViewProps) 
     }
   };
 
+  // Countdown Timer state and functions
+  const [customDuration, setCustomDuration] = useState<number>(120); // default 2 minutes
+  const [timeLeft, setTimeLeft] = useState<number>(120);
+
+  useEffect(() => {
+    if (wine && wine.timerDuration) {
+      setCustomDuration(wine.timerDuration);
+    }
+  }, [wine?.id, wine?.timerDuration]);
+
+  useEffect(() => {
+    if (!wine) return;
+    if (wine.timerStatus === 'running' && wine.timerEndsAt) {
+      const interval = setInterval(() => {
+        const remaining = Math.max(0, Math.round((wine.timerEndsAt! - Date.now()) / 1000));
+        setTimeLeft(remaining);
+        
+        if (remaining <= 0 && wine.status === 'active') {
+          clearInterval(interval);
+          handleEndAuction();
+        }
+      }, 1000);
+
+      const initial = Math.max(0, Math.round((wine.timerEndsAt - Date.now()) / 1000));
+      setTimeLeft(initial);
+
+      return () => clearInterval(interval);
+    } else if (wine.timerStatus === 'paused') {
+      setTimeLeft(wine.timerDuration || 120);
+    } else {
+      setTimeLeft(customDuration);
+    }
+  }, [wine?.timerStatus, wine?.timerEndsAt, wine?.timerDuration, wine?.status, customDuration]);
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const handleStartTimer = async () => {
+    if (!wine) return;
+    try {
+      const endsAt = Date.now() + (customDuration * 1000);
+      const updatedWine: WineItem = {
+        ...wine,
+        timerStatus: 'running',
+        timerEndsAt: endsAt,
+        timerDuration: customDuration,
+        status: 'active',
+        updatedAt: Date.now()
+      };
+      await setDoc(doc(db, 'auctions', 'active_wine'), updatedWine);
+      triggerStatus('เริ่มระบบประมูลสดและจับเวลาถอยหลังเรียบร้อย!', false);
+    } catch (err: any) {
+      console.error(err);
+      triggerStatus('เกิดข้อผิดพลาดในการเริ่มจับเวลา', true);
+    }
+  };
+
+  const handlePauseTimer = async () => {
+    if (!wine || !wine.timerEndsAt) return;
+    try {
+      const remaining = Math.max(0, Math.round((wine.timerEndsAt - Date.now()) / 1000));
+      const updatedWine: WineItem = {
+        ...wine,
+        timerStatus: 'paused',
+        timerEndsAt: null,
+        timerDuration: remaining,
+        updatedAt: Date.now()
+      };
+      await setDoc(doc(db, 'auctions', 'active_wine'), updatedWine);
+      triggerStatus('หยุดเวลาชั่วคราวแล้ว', false);
+    } catch (err: any) {
+      console.error(err);
+      triggerStatus('เกิดข้อผิดพลาดในการหยุดเวลา', true);
+    }
+  };
+
+  const handleResumeTimer = async () => {
+    if (!wine) return;
+    try {
+      const duration = wine.timerDuration || customDuration;
+      const endsAt = Date.now() + (duration * 1000);
+      const updatedWine: WineItem = {
+        ...wine,
+        timerStatus: 'running',
+        timerEndsAt: endsAt,
+        updatedAt: Date.now()
+      };
+      await setDoc(doc(db, 'auctions', 'active_wine'), updatedWine);
+      triggerStatus('นับเวลาต่อแล้ว', false);
+    } catch (err: any) {
+      console.error(err);
+      triggerStatus('เกิดข้อผิดพลาดในการนับเวลาต่อ', true);
+    }
+  };
+
+  const handleResetTimer = async () => {
+    if (!wine) return;
+    try {
+      const updatedWine: WineItem = {
+        ...wine,
+        timerStatus: 'idle',
+        timerEndsAt: null,
+        timerDuration: customDuration,
+        updatedAt: Date.now()
+      };
+      await setDoc(doc(db, 'auctions', 'active_wine'), updatedWine);
+      triggerStatus('รีเซ็ตเวลาประมูลเรียบร้อย', false);
+    } catch (err: any) {
+      console.error(err);
+      triggerStatus('เกิดข้อผิดพลาดในการรีเซ็ตเวลา', true);
+    }
+  };
+
   // Load pre-existing configuration into form fields
   useEffect(() => {
     if (wine) {
@@ -436,6 +635,8 @@ export default function AdminView({ wine, bids, onViewChange }: AdminViewProps) 
         setStep3(wine.bidIncrementSteps[2]);
         setStep4(wine.bidIncrementSteps[3]);
       }
+      setHeaderTitle(wine.headerTitle || 'VINTAGE RESERVE');
+      setLogoUrl(wine.logoUrl || '');
     }
   }, [wine]);
 
@@ -553,7 +754,12 @@ export default function AdminView({ wine, bids, onViewChange }: AdminViewProps) 
         highestBidderName: null,
         bidIncrementSteps: [step1, step2, step3, step4],
         status: 'active',
-        updatedAt: Date.now()
+        updatedAt: Date.now(),
+        timerDuration: customDuration,
+        timerEndsAt: null,
+        timerStatus: 'idle',
+        headerTitle: headerTitle.trim(),
+        logoUrl: logoUrl.trim()
       };
 
       // Set new wine item to Firestore document path auctions/active_wine
@@ -579,6 +785,31 @@ export default function AdminView({ wine, bids, onViewChange }: AdminViewProps) 
     }
   };
 
+  // Save only header settings (title and logo URL) without resetting active auction/bids
+  const handleSaveHeaderSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!wine) {
+      triggerStatus('ไม่พบข้อมูลล็อตการประมูลในระบบ', true);
+      return;
+    }
+    setIsSaving(true);
+    try {
+      const updatedWine: WineItem = {
+        ...wine,
+        headerTitle: headerTitle.trim(),
+        logoUrl: logoUrl.trim(),
+        updatedAt: Date.now()
+      };
+      await setDoc(doc(db, 'auctions', 'active_wine'), updatedWine);
+      triggerStatus('อัปเดตหัวเรื่องและโลโก้หน้าเว็บหลักเรียบร้อยแล้ว!', false);
+    } catch (err: any) {
+      console.error(err);
+      triggerStatus('เกิดข้อผิดพลาดในการบันทึกหัวเรื่องและโลโก้', true);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   // Atomic auction reset (resets the current bid of current wine to its starting price, wipes bid log)
   const handleResetAuction = async () => {
     if (!wine) {
@@ -597,6 +828,9 @@ export default function AdminView({ wine, bids, onViewChange }: AdminViewProps) 
         currentBid: wine.startingPrice,
         highestBidderId: null,
         highestBidderName: null,
+        timerStatus: 'idle',
+        timerEndsAt: null,
+        timerDuration: customDuration,
         updatedAt: Date.now()
       };
 
@@ -717,12 +951,23 @@ export default function AdminView({ wine, bids, onViewChange }: AdminViewProps) 
       <header className="border-b border-gold-400/20 bg-[#0a0a0a]/95 backdrop-blur-md px-6 py-4 sticky top-0 z-30">
         <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-4">
-            <div className="w-10 h-10 border-2 border-gold-400 rotate-45 flex items-center justify-center shrink-0">
-              <div className="w-6 h-6 bg-wine-700 -rotate-45" />
-            </div>
+            {wine?.logoUrl ? (
+              <img 
+                src={wine.logoUrl} 
+                alt="Logo" 
+                className="h-10 w-auto object-contain shrink-0" 
+                onError={(e) => { 
+                  (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1510812431401-41d2bd2722f3?auto=format&fit=crop&q=80&w=100";
+                }} 
+              />
+            ) : (
+              <div className="w-10 h-10 border-2 border-gold-400 rotate-45 flex items-center justify-center shrink-0">
+                <div className="w-6 h-6 bg-wine-700 -rotate-45" />
+              </div>
+            )}
             <div>
               <h1 className="text-xl md:text-2xl font-serif tracking-[0.2em] text-gold-400 uppercase leading-none font-medium">
-                VINTAGE RESERVE
+                {wine?.headerTitle || 'VINTAGE RESERVE'}
               </h1>
               <p className="text-[9px] text-stone-400 font-mono tracking-widest uppercase mt-1 flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-gold-400 animate-pulse" />
@@ -836,8 +1081,198 @@ export default function AdminView({ wine, bids, onViewChange }: AdminViewProps) 
                   </div>
                 )}
               </div>
+
+              {/* Countdown Timer Module */}
+              <div className="border-t border-gold-400/10 pt-4 mt-4 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Timer className="w-4 h-4 text-gold-400" />
+                    <span className="text-xs font-mono font-bold uppercase tracking-wider text-gold-400">
+                      ระบบจับเวลาประมูลถอยหลัง (Countdown Timer)
+                    </span>
+                  </div>
+                  <span className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
+                    wine.timerStatus === 'running'
+                      ? 'bg-[#112419] text-emerald-400 border-emerald-500/20'
+                      : wine.timerStatus === 'paused'
+                      ? 'bg-amber-950/30 text-amber-400 border-amber-500/20'
+                      : 'bg-stone-900/60 text-stone-400 border-stone-800'
+                  }`}>
+                    {wine.timerStatus === 'running' ? '● RUNNING' : wine.timerStatus === 'paused' ? '● PAUSED' : '● IDLE'}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
+                  {/* Left Column: Big visual timer */}
+                  <div className="md:col-span-5 flex flex-col items-center justify-center bg-stone-950 border border-gold-400/10 rounded-2xl py-4 px-6 text-center">
+                    <span className="text-[9px] font-mono tracking-widest text-stone-500 uppercase mb-1">
+                      เวลาที่เหลือ (Time Left)
+                    </span>
+                    <div className={`font-mono text-4xl font-black tracking-widest ${
+                      wine.timerStatus === 'running' ? 'text-gold-400 animate-pulse' : 'text-stone-300'
+                    }`}>
+                      {formatTime(timeLeft)}
+                    </div>
+                  </div>
+
+                  {/* Right Column: Timer adjustments & Buttons */}
+                  <div className="md:col-span-7 space-y-3">
+                    {wine.timerStatus === 'idle' || !wine.timerStatus ? (
+                      <div className="space-y-2">
+                        <label className="block text-[10px] font-mono uppercase text-stone-400 tracking-wider">
+                          เลือกหรือกำหนดเวลาประมูลถอยหลัง
+                        </label>
+                        <div className="flex gap-2">
+                          <select
+                            value={customDuration}
+                            onChange={(e) => setCustomDuration(Number(e.target.value))}
+                            className="bg-[#141414] border border-gold-400/10 rounded-xl px-3 py-1.5 text-xs text-stone-200 focus:outline-none focus:border-gold-400 transition-colors font-sans flex-grow"
+                          >
+                            <option value={30}>30 วินาที</option>
+                            <option value={60}>1 นาที (60 วินาที)</option>
+                            <option value={120}>2 นาที (120 วินาที)</option>
+                            <option value={180}>3 นาที (180 วินาที)</option>
+                            <option value={300}>5 นาที (300 วินาที)</option>
+                            <option value={600}>10 นาที (600 วินาที)</option>
+                          </select>
+                          
+                          <input
+                            type="number"
+                            min="5"
+                            max="3600"
+                            placeholder="วินาที"
+                            value={customDuration}
+                            onChange={(e) => setCustomDuration(Math.max(5, Number(e.target.value)))}
+                            className="bg-[#141414] border border-gold-400/10 rounded-xl px-3 py-1.5 text-xs text-stone-200 focus:outline-none focus:border-gold-400 transition-colors font-mono w-24 text-center"
+                          />
+                        </div>
+
+                        {wine.status === 'active' && (
+                          <button
+                            type="button"
+                            onClick={handleStartTimer}
+                            className="w-full py-2.5 px-4 bg-gradient-to-r from-emerald-800 to-emerald-950 hover:from-emerald-700 hover:to-emerald-900 border border-emerald-500/20 text-emerald-200 hover:text-white rounded-xl text-xs font-mono font-bold uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-2 shadow-md"
+                          >
+                            <Play className="w-3.5 h-3.5 text-emerald-400" />
+                            <span>เปิดระบบประมูลสดพร้อมจับเวลา</span>
+                          </button>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <span className="block text-[10px] font-mono uppercase text-stone-400 tracking-wider">
+                          ควบคุมเวลาประมูลถอยหลัง
+                        </span>
+                        
+                        <div className="grid grid-cols-2 gap-2">
+                          {wine.timerStatus === 'running' ? (
+                            <button
+                              type="button"
+                              onClick={handlePauseTimer}
+                              className="py-2.5 px-3 bg-gradient-to-r from-amber-800 to-amber-950 hover:from-amber-700 hover:to-amber-900 border border-amber-500/20 text-amber-200 hover:text-white rounded-xl text-xs font-mono font-bold uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-md"
+                            >
+                              <Pause className="w-3.5 h-3.5 text-amber-400" />
+                              <span>หยุดชั่วคราว</span>
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={handleResumeTimer}
+                              className="py-2.5 px-3 bg-gradient-to-r from-emerald-800 to-emerald-950 hover:from-emerald-700 hover:to-emerald-900 border border-emerald-500/20 text-emerald-200 hover:text-white rounded-xl text-xs font-mono font-bold uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-md"
+                            >
+                              <Play className="w-3.5 h-3.5 text-emerald-400" />
+                              <span>นับเวลาต่อ</span>
+                            </button>
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={handleResetTimer}
+                            className="py-2.5 px-3 bg-[#1c1415] hover:bg-[#2c1b1c] border border-rose-500/20 text-rose-300 hover:text-rose-100 rounded-xl text-xs font-mono font-bold uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-md"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5 text-rose-400" />
+                            <span>รีเซ็ตเวลา</span>
+                          </button>
+                        </div>
+                        
+                        <p className="text-[10px] text-stone-500 leading-relaxed">
+                          ⚠️ เมื่อเวลาจับคู่นับถอยหลังถึงศูนย์ ระบบจะปิดการเสนอราคาและลงชื่อผู้ชนะโดยอัตโนมัติ
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
           )}
+
+          {/* Header Title & Logo Customization Form */}
+          <div className="bg-[#0a0a0a] rounded-3xl border border-gold-400/20 p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-gold-400/10 pb-4">
+              <div className="flex items-center gap-2">
+                <Settings className="w-5 h-5 text-gold-400" />
+                <h2 className="text-md font-serif font-medium text-stone-100">ตั้งค่าหัวเรื่องและโลโก้หน้าเว็บหลัก</h2>
+              </div>
+            </div>
+
+            <form onSubmit={handleSaveHeaderSettings} className="space-y-4">
+              {/* Header Title */}
+              <div>
+                <label className="block text-xs font-mono uppercase tracking-wider text-stone-400 mb-1.5">
+                  หัวเรื่องหลักของหน้าจอแสดงผล (Header Title)
+                </label>
+                <input
+                  type="text"
+                  placeholder="เช่น VINTAGE RESERVE"
+                  value={headerTitle}
+                  onChange={(e) => setHeaderTitle(e.target.value)}
+                  className="w-full bg-[#141414] border border-gold-400/10 rounded-xl py-2 px-3 text-xs text-stone-200 focus:outline-none focus:border-gold-400 transition-colors"
+                />
+              </div>
+
+              {/* Logo Url */}
+              <div>
+                <label className="block text-xs font-mono uppercase tracking-wider text-stone-400 mb-1.5">
+                  URL รูปภาพโลโก้ (Logo Image URL) <span className="text-stone-500 font-sans">(เว้นว่างไว้เพื่อใช้โลโก้เริ่มต้น)</span>
+                </label>
+                <input
+                  type="url"
+                  placeholder="https://example.com/logo.png"
+                  value={logoUrl}
+                  onChange={(e) => setLogoUrl(e.target.value)}
+                  className="w-full bg-[#141414] border border-gold-400/10 rounded-xl py-2 px-3 text-xs text-stone-200 focus:outline-none focus:border-gold-400 transition-colors font-mono"
+                />
+              </div>
+
+              {/* Preview and Save Action */}
+              <div className="pt-2 border-t border-gold-400/10 flex items-center justify-between gap-4">
+                {logoUrl ? (
+                  <div className="flex items-center gap-2 bg-[#141414] rounded-lg border border-gold-400/5 px-3 py-1.5">
+                    <span className="text-[9px] font-mono text-stone-500">พรีวิวโลโก้:</span>
+                    <img
+                      src={logoUrl}
+                      alt="Logo Preview"
+                      className="h-6 object-contain"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1510812431401-41d2bd2722f3?auto=format&fit=crop&q=80&w=100";
+                      }}
+                    />
+                  </div>
+                ) : (
+                  <span className="text-[10px] text-stone-500 italic font-sans">กำลังใช้โลโก้คลาสสิกเริ่มต้น</span>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={isSaving}
+                  className="flex items-center gap-1.5 py-2 px-4 bg-gradient-to-r from-wine-800 to-wine-950 hover:from-wine-700 hover:to-wine-900 border border-gold-400/20 text-gold-200 hover:text-white text-xs font-mono uppercase tracking-wider cursor-pointer rounded-xl transition-all shadow-md"
+                >
+                  <Save className="w-3.5 h-3.5 text-gold-400" />
+                  <span>บันทึกหัวเรื่องและโลโก้</span>
+                </button>
+              </div>
+            </form>
+          </div>
 
           {/* Wine Lot Config Form (Card Container) */}
           <div className="bg-[#0a0a0a] rounded-3xl border border-gold-400/20 p-6 shadow-2xl space-y-6">
@@ -1201,6 +1636,16 @@ export default function AdminView({ wine, bids, onViewChange }: AdminViewProps) 
                       )}
                       
                       <div className="flex items-center gap-1.5">
+                        {hasBid && (
+                          <button
+                            type="button"
+                            onClick={() => handleResetBidderBids(b.id, `${b.firstName} ${b.lastName}`)}
+                            className="p-1 text-rose-400 hover:text-rose-300 hover:bg-rose-400/10 rounded-md transition-colors cursor-pointer"
+                            title="รีเซ็ตการเสนอราคาของท่านนี้รายบุคคล"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                         <button
                           type="button"
                           onClick={() => startEditBidder(b)}

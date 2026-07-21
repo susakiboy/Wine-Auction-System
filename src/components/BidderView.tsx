@@ -173,6 +173,9 @@ export default function BidderView({ wine, bids, onViewChange }: BidderViewProps
         if (dbWine.status === 'ended') {
           throw new Error("ขออภัย การประมูลล็อตนี้ได้สิ้นสุดลงเรียบร้อยแล้ว");
         }
+        if (!dbWine.timerStatus || dbWine.timerStatus === 'idle') {
+          throw new Error("ขออภัย ระบบประมูลสดยังไม่ถูกเปิด ห้ามเสนอราคาก่อนเริ่มการประมูลโดยเด็ดขาด");
+        }
         const targetBid = dbWine.currentBid + incrementAmount;
 
         // Transactional safety checks
@@ -235,12 +238,23 @@ export default function BidderView({ wine, bids, onViewChange }: BidderViewProps
 
       {/* Floating Header */}
       <header className="border-b border-gold-400/20 bg-[#0a0a0a]/95 backdrop-blur-md px-4 py-3.5 sticky top-0 z-30 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="w-6 h-6 border border-gold-400 rotate-45 flex items-center justify-center shrink-0">
-            <div className="w-3.5 h-3.5 bg-wine-700 -rotate-45" />
-          </div>
-          <h1 className="text-sm font-bold font-serif text-stone-100 tracking-[0.15em] uppercase">
-            BIDDER PORTAL
+        <div className="flex items-center gap-2 min-w-0">
+          {wine?.logoUrl ? (
+            <img 
+              src={wine.logoUrl} 
+              alt="Logo" 
+              className="h-6 w-auto object-contain shrink-0" 
+              onError={(e) => { 
+                (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1510812431401-41d2bd2722f3?auto=format&fit=crop&q=80&w=100";
+              }} 
+            />
+          ) : (
+            <div className="w-6 h-6 border border-gold-400 rotate-45 flex items-center justify-center shrink-0">
+              <div className="w-3.5 h-3.5 bg-wine-700 -rotate-45" />
+            </div>
+          )}
+          <h1 className="text-xs sm:text-sm font-bold font-serif text-stone-100 tracking-[0.15em] uppercase truncate">
+            {wine?.headerTitle || 'VINTAGE RESERVE'}
           </h1>
         </div>
 
@@ -435,12 +449,18 @@ export default function BidderView({ wine, bids, onViewChange }: BidderViewProps
                   )}
                 </div>
 
-                {/* Incremental bid buttons */}
+                 {/* Incremental bid buttons */}
                 {wine.status === 'ended' ? (
                   <div className="p-5 bg-amber-500/10 border border-amber-500/20 rounded-2xl text-center space-y-2 animate-fade-in">
                     <Award className="w-8 h-8 text-amber-400 mx-auto animate-bounce" />
                     <h4 className="text-sm font-bold text-amber-300">🔒 การประมูลสำหรับล็อตนี้สิ้นสุดแล้ว</h4>
                     <p className="text-xs text-stone-400">ขอขอบคุณผู้ร่วมประมูลทุกท่าน ทางระบบได้บันทึกรายชื่อผู้ชนะการเสนอราคาเรียบร้อยแล้ว</p>
+                  </div>
+                ) : !wine.timerStatus || wine.timerStatus === 'idle' ? (
+                  <div className="p-5 bg-[#291316]/80 border border-rose-500/20 rounded-2xl text-center space-y-2 animate-fade-in">
+                    <AlertCircle className="w-8 h-8 text-rose-400 mx-auto animate-pulse" />
+                    <h4 className="text-sm font-bold text-rose-300">⏳ ยังไม่เปิดระบบเสนอราคา (Locked)</h4>
+                    <p className="text-xs text-stone-400">ห้ามเคาะเสนอราคาก่อนเริ่มการประมูลโดยเด็ดขาด กรุณารอผู้ดูแลระบบกดเริ่มปุ่มเปิดระบบประมูล</p>
                   </div>
                 ) : (
                   <div className="space-y-2.5">

@@ -14,6 +14,11 @@ export interface WineItem {
   bidIncrementSteps: number[];
   status: 'active' | 'ended';
   updatedAt: number;
+  timerDuration?: number; // duration in seconds
+  timerEndsAt?: number | null; // epoch timestamp when the timer expires
+  timerStatus?: 'idle' | 'running' | 'paused' | 'ended';
+  headerTitle?: string; // custom website header title
+  logoUrl?: string; // custom website logo URL
 }
 
 export interface Bidder {
