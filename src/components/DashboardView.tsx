@@ -581,19 +581,30 @@ export default function DashboardView({ wine, bids, onViewChange }: DashboardVie
                 </div>
               </div>
 
-              {/* Close Button */}
-              <button
-                type="button"
-                onClick={() => setIsHistoryFullscreen(false)}
-                className="flex items-center gap-2 px-5 py-3 bg-[#221013] hover:bg-[#34181d] border border-wine-700/40 hover:border-gold-400/40 text-gold-400 hover:text-white rounded-2xl font-mono font-bold uppercase text-xs tracking-wider transition-all cursor-pointer shadow-lg active:scale-95 shrink-0"
-              >
-                <X className="w-4 h-4 text-gold-400" />
-                <span>ปิดหน้าจอนำเสนอ (Close View)</span>
-              </button>
+              {/* Action Buttons */}
+              <div className="flex items-center gap-3 shrink-0 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => setIsQrFullscreen(true)}
+                  className="flex items-center gap-2 px-5 py-3 bg-wine-950/80 hover:bg-wine-900 border border-gold-400/30 hover:border-gold-400/60 text-gold-300 hover:text-white rounded-2xl font-mono font-bold uppercase text-xs tracking-wider transition-all cursor-pointer shadow-lg active:scale-95"
+                >
+                  <QrCode className="w-4 h-4 text-gold-400 animate-pulse" />
+                  <span>สแกน QR Code (เต็มหน้าจอ)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsHistoryFullscreen(false)}
+                  className="flex items-center gap-2 px-5 py-3 bg-[#221013] hover:bg-[#34181d] border border-wine-700/40 hover:border-gold-400/40 text-gold-400 hover:text-white rounded-2xl font-mono font-bold uppercase text-xs tracking-wider transition-all cursor-pointer shadow-lg active:scale-95"
+                >
+                  <X className="w-4 h-4 text-gold-400" />
+                  <span>ปิดหน้าจอนำเสนอ (Close View)</span>
+                </button>
+              </div>
             </div>
 
             {/* Presentation Stats Widgets Section */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5 mb-8">
               {/* Card 1: Current Wine Name */}
               <div className="bg-[#121212] border border-gold-400/10 p-5 rounded-2xl relative overflow-hidden group hover:border-gold-400/30 transition-all">
                 <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
@@ -612,7 +623,44 @@ export default function DashboardView({ wine, bids, onViewChange }: DashboardVie
                 </p>
               </div>
 
-              {/* Card 2: Total Registered/Active Bidders */}
+              {/* Card 2: Live Countdown Timer */}
+              <div className={`bg-[#121212] border p-5 rounded-2xl relative overflow-hidden group hover:border-gold-400/30 transition-all ${
+                wine?.timerStatus === 'running' && timeLeft <= 10 
+                  ? 'border-rose-500/40 bg-rose-950/10' 
+                  : 'border-gold-400/10'
+              }`}>
+                <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
+                  <Timer className="w-16 h-16 text-gold-400" />
+                </div>
+                <span className="text-[10px] font-mono tracking-widest text-gold-400 uppercase block mb-1">
+                  {wine?.timerStatus === 'running' ? '⏳ เวลาประมูลที่เหลือ' : '⏳ นับถอยหลัง (Timer)'}
+                </span>
+                {wine?.timerStatus && wine?.timerStatus !== 'idle' ? (
+                  <>
+                    <h4 className={`text-2xl font-mono font-black ${
+                      wine.timerStatus === 'running' && timeLeft <= 10 ? 'text-rose-500 animate-pulse' : 'text-gold-300'
+                    }`}>
+                      {formatTime(timeLeft)}
+                    </h4>
+                    <p className="text-xs text-stone-400 mt-2 font-sans">
+                      สถานะเวลา: <span className="text-stone-300 font-medium">
+                        {wine.timerStatus === 'running' ? 'กำลังนับถอยหลัง' : 'หยุดชั่วคราว'}
+                      </span>
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <h4 className="text-lg font-sans font-bold text-stone-400">
+                      ยังไม่เปิดระบบเวลา
+                    </h4>
+                    <p className="text-xs text-stone-500 mt-2 font-sans">
+                      กรุณารอผู้ดูแลระบบเริ่มประมูล
+                    </p>
+                  </>
+                )}
+              </div>
+
+              {/* Card 3: Total Registered/Active Bidders */}
               <div className="bg-[#121212] border border-gold-400/10 p-5 rounded-2xl relative overflow-hidden group hover:border-gold-400/30 transition-all">
                 <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
                   <Users className="w-16 h-16 text-gold-400" />
@@ -628,7 +676,7 @@ export default function DashboardView({ wine, bids, onViewChange }: DashboardVie
                 </p>
               </div>
 
-              {/* Card 3: Accumulated Funds */}
+              {/* Card 4: Accumulated Funds */}
               <div className="bg-[#121212] border border-gold-400/10 p-5 rounded-2xl relative overflow-hidden group hover:border-gold-400/30 transition-all">
                 <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
                   <DollarSign className="w-16 h-16 text-gold-400" />
@@ -644,7 +692,7 @@ export default function DashboardView({ wine, bids, onViewChange }: DashboardVie
                 </p>
               </div>
 
-              {/* Card 4: Starting Price / Reference Price */}
+              {/* Card 5: Starting Price / Reference Price */}
               <div className="bg-[#121212] border border-gold-400/10 p-5 rounded-2xl relative overflow-hidden group hover:border-gold-400/30 transition-all">
                 <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
                   <TrendingUp className="w-16 h-16 text-gold-400" />
@@ -670,16 +718,12 @@ export default function DashboardView({ wine, bids, onViewChange }: DashboardVie
                   <p className="text-xs text-stone-500 mt-1">ยอดเสนอราคาแรกที่กดส่งเข้ามาจะขึ้นแสดง ณ ตำแหน่งนี้แบบเรียลไทม์</p>
                 </div>
               ) : (
-                <table className="w-full text-left border-collapse min-w-[1000px]">
+                <table className="w-full text-left border-collapse min-w-[800px]">
                   <thead>
                     <tr className="border-b border-gold-400/20 text-gold-400 font-mono text-xs tracking-wider uppercase bg-[#140e10]">
-                      <th className="py-4.5 px-6 font-sans font-bold">ลำดับ (No.)</th>
-                      <th className="py-4.5 px-6 font-sans font-bold">ล็อตประมูล (Auction Lot)</th>
-                      <th className="py-4.5 px-6 text-center font-sans font-bold">จำนวนผู้เข้าร่วมประมูลทั้งหมด (Total Bidders)</th>
-                      <th className="py-4.5 px-6 text-right font-sans font-bold">ยอดเงินระดมทุนประมูลสะสม (Accumulated Funds)</th>
                       <th className="py-4.5 px-6 text-center font-sans font-bold">หมายเลข BID (Bid ID)</th>
-                      <th className="py-4.5 px-6 font-sans font-bold">ชื่อ - นามสกุล (Full Name)</th>
-                      <th className="py-4.5 px-6 text-right font-sans font-bold">ราคากลาง (Starting Price)</th>
+                      <th className="py-4.5 px-6 font-sans font-bold">ชื่อ-นามสกุล (Full Name)</th>
+                      <th className="py-4.5 px-6 text-right font-sans font-bold">ราคากลาง (Reference Price)</th>
                       <th className="py-4.5 px-6 text-right font-sans font-bold">ยอดเสนอราคา (Bid Amount)</th>
                       <th className="py-4.5 px-6 text-center font-sans font-bold">เวลาเสนอราคา (Time)</th>
                     </tr>
@@ -694,32 +738,6 @@ export default function DashboardView({ wine, bids, onViewChange }: DashboardVie
                             : idx % 2 === 0 ? 'bg-[#0f0f0f]/40' : 'bg-transparent'
                         } hover:bg-wine-950/20`}
                       >
-                        {/* No. */}
-                        <td className="py-4 px-6 font-mono text-sm">
-                          {idx === 0 ? (
-                            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-gold-400 text-stone-950 text-[10px] font-bold">
-                              🏆 LEADER
-                            </span>
-                          ) : (
-                            <span className="text-stone-400"># {bids.length - idx}</span>
-                          )}
-                        </td>
-
-                        {/* Auction Lot */}
-                        <td className="py-4 px-6 text-sm text-stone-100 max-w-[200px] truncate" title={wine?.name || ''}>
-                          {wine?.name || 'ไม่มีข้อมูล'}
-                        </td>
-
-                        {/* Total Bidders */}
-                        <td className="py-4 px-6 text-center font-mono text-sm text-stone-300">
-                          {bidders.length} ท่าน
-                        </td>
-
-                        {/* Accumulated Funds */}
-                        <td className="py-4 px-6 text-right font-mono text-sm text-gold-400 font-bold">
-                          ฿{accumulatedFunds.toLocaleString('th-TH')}
-                        </td>
-
                         {/* Bid ID */}
                         <td className="py-4 px-6 text-center">
                           <span className={`inline-block px-3 py-1 font-mono text-sm font-bold rounded-lg border ${
@@ -731,12 +749,19 @@ export default function DashboardView({ wine, bids, onViewChange }: DashboardVie
                           </span>
                         </td>
 
-                        {/* Full Name */}
-                        <td className="py-4 px-6 text-sm text-stone-200">
-                          {b.bidderName}
+                        {/* Full Name - Absolute full text with no truncation/ellipsis */}
+                        <td className="py-4 px-6 text-sm text-stone-100 font-medium tracking-wide break-words whitespace-normal min-w-[250px]">
+                          <div className="flex items-center gap-2">
+                            <span>{b.bidderName}</span>
+                            {idx === 0 && (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] bg-gold-400/15 text-gold-300 font-mono font-bold uppercase tracking-wider animate-pulse">
+                                Leader
+                              </span>
+                            )}
+                          </div>
                         </td>
 
-                        {/* Starting Price */}
+                        {/* Starting Price (ราคากลาง) */}
                         <td className="py-4 px-6 text-right font-mono text-sm text-stone-300">
                           ฿{(wine?.startingPrice || 0).toLocaleString('th-TH')}
                         </td>
