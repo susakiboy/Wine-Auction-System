@@ -456,7 +456,7 @@ export default function DashboardView({ wine, bids, onViewChange }: DashboardVie
                             ID: {b.bidderId}
                           </div>
                           <div className="text-left">
-                            <span className="text-xs font-semibold block text-stone-200">
+                            <span className="text-sm font-black block text-white tracking-wide">
                               {b.bidderName}
                             </span>
                             <span className="text-[10px] text-stone-400 font-mono">
@@ -749,12 +749,14 @@ export default function DashboardView({ wine, bids, onViewChange }: DashboardVie
                           </span>
                         </td>
 
-                        {/* Full Name - Absolute full text with no truncation/ellipsis */}
-                        <td className="py-4 px-6 text-sm text-stone-100 font-medium tracking-wide break-words whitespace-normal min-w-[250px]">
-                          <div className="flex items-center gap-2">
-                            <span>{b.bidderName}</span>
+                        {/* Full Name - Absolute full text with no truncation/ellipsis, extra bold and highly prominent */}
+                        <td className="py-5 px-6 break-words whitespace-normal min-w-[300px]">
+                          <div className="flex items-center gap-3">
+                            <span className="text-lg md:text-xl font-black text-white tracking-wide drop-shadow-sm font-sans">
+                              {b.bidderName}
+                            </span>
                             {idx === 0 && (
-                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] bg-gold-400/15 text-gold-300 font-mono font-bold uppercase tracking-wider animate-pulse">
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] bg-gold-400 text-stone-950 font-sans font-black uppercase tracking-wider animate-pulse shadow-md">
                                 Leader
                               </span>
                             )}
